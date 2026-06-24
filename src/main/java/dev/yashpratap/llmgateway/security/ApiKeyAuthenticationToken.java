@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.security;
 
+import dev.yashpratap.llmgateway.domain.ApiKey;
 import dev.yashpratap.llmgateway.domain.Tenant;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -24,6 +25,7 @@ public class ApiKeyAuthenticationToken extends AbstractAuthenticationToken {
     private final String rawKey;
     private final Tenant tenant;
     private final UUID apiKeyId;
+    private final ApiKey apiKey;
 
     /**
      * Creates an unauthenticated token from the raw API key string.
@@ -35,6 +37,7 @@ public class ApiKeyAuthenticationToken extends AbstractAuthenticationToken {
         this.rawKey = rawKey;
         this.tenant = null;
         this.apiKeyId = null;
+        this.apiKey = null;
         setAuthenticated(false);
     }
 
@@ -43,14 +46,16 @@ public class ApiKeyAuthenticationToken extends AbstractAuthenticationToken {
      *
      * @param tenant      the tenant resolved from the database for the validated key
      * @param apiKeyId    the UUID of the API key record that was matched
+     * @param apiKey      the full {@link ApiKey} entity matched during authentication
      * @param authorities the granted authorities for this principal
      */
-    public ApiKeyAuthenticationToken(Tenant tenant, UUID apiKeyId,
+    public ApiKeyAuthenticationToken(Tenant tenant, UUID apiKeyId, ApiKey apiKey,
                                      Collection<? extends GrantedAuthority> authorities) {
         super(authorities);
         this.rawKey = null;
         this.tenant = tenant;
         this.apiKeyId = apiKeyId;
+        this.apiKey = apiKey;
         setAuthenticated(true);
     }
 
@@ -90,5 +95,14 @@ public class ApiKeyAuthenticationToken extends AbstractAuthenticationToken {
      */
     public UUID getApiKeyId() {
         return apiKeyId;
+    }
+
+    /**
+     * Returns the full {@link ApiKey} entity matched during authentication.
+     *
+     * @return the authenticated {@link ApiKey}, or {@code null} on an unauthenticated token
+     */
+    public ApiKey getApiKey() {
+        return apiKey;
     }
 }

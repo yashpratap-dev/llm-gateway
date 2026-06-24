@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.tenant;
 
+import dev.yashpratap.llmgateway.domain.ApiKey;
 import dev.yashpratap.llmgateway.domain.Tenant;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.RequestScope;
@@ -26,6 +27,7 @@ public class TenantContext {
     private UUID tenantId;
     private UUID apiKeyId;
     private Tenant tenant;
+    private ApiKey apiKey;
 
     /**
      * Returns the UUID of the authenticated tenant for the current request.
@@ -80,6 +82,24 @@ public class TenantContext {
     public void setTenant(Tenant tenant) {
         this.tenant = tenant;
         this.tenantId = tenant != null ? tenant.getId() : null;
+    }
+
+    /**
+     * Returns the {@link ApiKey} entity used to authenticate the current request.
+     *
+     * @return the authenticated {@link ApiKey}, or {@code null} before authentication
+     */
+    public ApiKey getApiKey() {
+        return apiKey;
+    }
+
+    /**
+     * Sets the {@link ApiKey} that authenticated this request.
+     *
+     * @param apiKey the authenticated API key entity
+     */
+    public void setApiKey(ApiKey apiKey) {
+        this.apiKey = apiKey;
     }
 
     /**

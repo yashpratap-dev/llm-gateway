@@ -97,7 +97,7 @@ class ApiKeyFilterTest {
         Tenant tenant = new Tenant();
         UUID apiKeyId = UUID.randomUUID();
         ApiKeyAuthenticationToken authenticated = new ApiKeyAuthenticationToken(
-                tenant, apiKeyId, List.of());
+                tenant, apiKeyId, null, List.of());
 
         when(authenticationManager.authenticate(any())).thenReturn(authenticated);
 

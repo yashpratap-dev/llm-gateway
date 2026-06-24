@@ -79,6 +79,7 @@ public class ApiKeyAuthenticationProvider implements AuthenticationProvider {
         return new ApiKeyAuthenticationToken(
                 tenant,
                 apiKey.getId(),
+                apiKey,
                 List.of(new SimpleGrantedAuthority("ROLE_API_USER")));
     }
 

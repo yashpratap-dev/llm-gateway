@@ -106,6 +106,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             ApiKeyAuthenticationToken authToken = (ApiKeyAuthenticationToken) authenticated;
             tenantContext.setTenant(authToken.getTenant());
             tenantContext.setApiKeyId(authToken.getApiKeyId());
+            tenantContext.setApiKey(authToken.getApiKey());
 
             filterChain.doFilter(request, response);
         } catch (BadCredentialsException ex) {

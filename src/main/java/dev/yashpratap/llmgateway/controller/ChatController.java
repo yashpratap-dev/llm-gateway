@@ -1,12 +1,21 @@
 package dev.yashpratap.llmgateway.controller;
 
+import dev.yashpratap.llmgateway.billing.BudgetService;
+import dev.yashpratap.llmgateway.billing.CostCalculator;
+import dev.yashpratap.llmgateway.billing.UsageLogger;
+import dev.yashpratap.llmgateway.cache.RateLimiterService;
+import dev.yashpratap.llmgateway.cache.RedisCacheService;
 import dev.yashpratap.llmgateway.common.ApiResponse;
+import dev.yashpratap.llmgateway.common.RateLimitException;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.GatewayMeta;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
+import dev.yashpratap.llmgateway.provider.Usage;
+import dev.yashpratap.llmgateway.routing.RoutingPolicyService;
 import dev.yashpratap.llmgateway.routing.RoutingService;
 import dev.yashpratap.llmgateway.routing.RoutingStrategy;
+import dev.yashpratap.llmgateway.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,60 +23,151 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Optional;
+import java.util.UUID;
+
 /**
  * REST controller that exposes the primary chat completions endpoint.
  *
- * <p>Accepts an OpenAI-compatible {@code POST /api/v1/chat/completions} request,
- * routes it to the appropriate provider via {@link RoutingService}, and returns the
- * completion wrapped in the gateway's standard response envelope.</p>
- *
- * <p>The routing strategy defaults to {@link RoutingStrategy#PRIORITY}.
- * Per-tenant strategy selection is wired in M4 once the routing policy is read
- * from {@link dev.yashpratap.llmgateway.domain.RoutingPolicy}.</p>
+ * <p>Accepts an OpenAI-compatible {@code POST /api/v1/chat/completions} request and
+ * executes the full gateway pipeline:</p>
+ * <ol>
+ *   <li>Rate limit enforcement (fixed-window counter via Redis)</li>
+ *   <li>Budget check (synchronous, throws {@code 402} if exhausted)</li>
+ *   <li>Cache lookup (tenant-isolated, returns early on hit)</li>
+ *   <li>Routing strategy resolution from DB</li>
+ *   <li>Provider selection and request forwarding</li>
+ *   <li>Cost calculation and usage logging (both async)</li>
+ *   <li>Response caching and budget deduction (both async)</li>
+ * </ol>
  */
 @RestController
 @RequestMapping("/api/v1/chat")
 public class ChatController {
 
     private final RoutingService routingService;
+    private final RoutingPolicyService routingPolicyService;
+    private final RateLimiterService rateLimiterService;
+    private final BudgetService budgetService;
+    private final RedisCacheService redisCacheService;
+    private final CostCalculator costCalculator;
+    private final UsageLogger usageLogger;
+    private final TenantContext tenantContext;
 
     /**
-     * Constructs the controller with its routing dependency.
+     * Constructs the controller with all required pipeline dependencies.
      *
-     * @param routingService service responsible for selecting the downstream provider
+     * @param routingService       selects the downstream LLM provider
+     * @param routingPolicyService resolves the per-tenant routing strategy from the DB
+     * @param rateLimiterService   enforces per-plan request rate limits via Redis
+     * @param budgetService        enforces per-tenant USD spending limits
+     * @param redisCacheService    tenant-isolated exact-match response cache
+     * @param costCalculator       calculates USD cost from token counts and model pricing
+     * @param usageLogger          persists usage log entries asynchronously
+     * @param tenantContext        request-scoped holder for the authenticated tenant
      */
-    public ChatController(RoutingService routingService) {
+    public ChatController(RoutingService routingService,
+                          RoutingPolicyService routingPolicyService,
+                          RateLimiterService rateLimiterService,
+                          BudgetService budgetService,
+                          RedisCacheService redisCacheService,
+                          CostCalculator costCalculator,
+                          UsageLogger usageLogger,
+                          TenantContext tenantContext) {
         this.routingService = routingService;
+        this.routingPolicyService = routingPolicyService;
+        this.rateLimiterService = rateLimiterService;
+        this.budgetService = budgetService;
+        this.redisCacheService = redisCacheService;
+        this.costCalculator = costCalculator;
+        this.usageLogger = usageLogger;
+        this.tenantContext = tenantContext;
     }
 
     /**
-     * Handles synchronous chat completion requests.
-     *
-     * <p>Selects a provider, forwards the request, and augments the response with
-     * gateway metadata (provider name and measured latency).</p>
+     * Handles synchronous chat completion requests through the full gateway pipeline.
      *
      * @param request the provider-agnostic chat completion request body
-     * @return {@code 200 OK} with the completed response wrapped in {@link ApiResponse}
+     * @return {@code 200 OK} with the completion response; includes {@code X-RateLimit-Remaining} header
+     * @throws RateLimitException       if the tenant has exceeded their plan's rate limit
+     * @throws dev.yashpratap.llmgateway.common.BudgetExceededException if the tenant's budget is exhausted
+     * @throws dev.yashpratap.llmgateway.provider.exception.ProviderException if all providers fail
      */
     @PostMapping("/completions")
     public ResponseEntity<ApiResponse<ChatResponse>> complete(
             @Valid @RequestBody ChatRequest request) {
 
-        RoutingStrategy strategy = RoutingStrategy.PRIORITY;
+        UUID tenantId = tenantContext.getTenantId();
+        UUID apiKeyId = tenantContext.getApiKeyId();
+        String plan = tenantContext.getTenant().getPlan();
+
+        // 1. Rate limit
+        if (!rateLimiterService.isAllowed(tenantId, plan)) {
+            throw new RateLimitException("Rate limit exceeded for plan " + plan);
+        }
+
+        // 2. Budget
+        budgetService.checkBudget(tenantId);
+
+        // 3. Cache (tenant-isolated)
+        Optional<ChatResponse> cached = redisCacheService.get(tenantId, request);
+        if (cached.isPresent()) {
+            ChatResponse c = cached.get();
+            usageLogger.log(tenantId, apiKeyId, c.provider(), c.model(),
+                    0, 0, 0.0, 0L, true, "SUCCESS");
+            ChatResponse hit = new ChatResponse(c.id(), c.model(), c.provider(),
+                    c.choices(), c.usage(), new GatewayMeta(c.provider(), true, 0L));
+            int rem = rateLimiterService.getRemainingRequests(tenantId, plan);
+            return ResponseEntity.ok()
+                    .header("X-RateLimit-Remaining", String.valueOf(rem))
+                    .body(ApiResponse.success(hit));
+        }
+
+        // 4. Routing strategy from DB
+        RoutingStrategy strategy = routingPolicyService.getStrategyForTenant(tenantId);
+
+        // 5. Route
         LLMProvider provider = routingService.route(request, strategy);
 
+        // 6. Call provider — log FAILED and rethrow on exception
         long startMs = System.currentTimeMillis();
-        ChatResponse response = provider.generate(request);
+        ChatResponse response;
+        try {
+            response = provider.generate(request);
+        } catch (Exception e) {
+            long latencyMs = System.currentTimeMillis() - startMs;
+            usageLogger.log(tenantId, apiKeyId, provider.name().name(), request.model(),
+                    0, 0, 0.0, latencyMs, false, "FAILED");
+            throw e;
+        }
         long latencyMs = System.currentTimeMillis() - startMs;
 
+        // 7. Cost
+        double costUsd = costCalculator.calculate(provider.name().name(), response.model(),
+                response.usage().promptTokens(), response.usage().completionTokens());
+
+        // 8. Final response
         ChatResponse finalResponse = new ChatResponse(
-                response.id(),
-                response.model(),
-                provider.name().name(),
+                response.id(), response.model(), provider.name().name(),
                 response.choices(),
-                response.usage(),
+                new Usage(response.usage().promptTokens(), response.usage().completionTokens(), costUsd),
                 new GatewayMeta(provider.name().name(), false, latencyMs));
 
-        return ResponseEntity.ok(ApiResponse.success(finalResponse));
+        // 9. Cache
+        redisCacheService.put(tenantId, request, finalResponse);
+
+        // 10. Log async
+        usageLogger.log(tenantId, apiKeyId, provider.name().name(), response.model(),
+                response.usage().promptTokens(), response.usage().completionTokens(),
+                costUsd, latencyMs, false, "SUCCESS");
+
+        // 11. Budget deduct async
+        budgetService.deductAsync(tenantId, costUsd);
+
+        // 12. Return
+        int remaining = rateLimiterService.getRemainingRequests(tenantId, plan);
+        return ResponseEntity.ok()
+                .header("X-RateLimit-Remaining", String.valueOf(remaining))
+                .body(ApiResponse.success(finalResponse));
     }
 }
