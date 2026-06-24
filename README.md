@@ -1,61 +1,44 @@
 # LLM Gateway
 
-A production-grade, multi-tenant API gateway for Large Language Models built with Spring Boot 3.3.5. Route requests across Groq and OpenAI with API-key authentication, per-tenant budget enforcement, semantic caching, circuit-breaking, and Prometheus/Grafana observability — all behind a single unified endpoint.
+Production-grade multi-tenant LLM Gateway with API-key auth, per-tenant routing policies (COST/LATENCY/PRIORITY), Redis caching, rate limiting, budget enforcement, cost tracking, and Prometheus/Grafana observability.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          LLM Gateway                                │
-│                                                                     │
-│  Client Request                                                     │
-│      │                                                              │
-│      ▼                                                              │
-│  ┌──────────────┐                                                   │
-│  │  Auth Filter │  Validates API key, resolves tenant               │
-│  │  (ApiKeyFilter)                                                  │
-│  └──────┬───────┘                                                   │
-│         │                                                           │
-│         ▼                                                           │
-│  ┌──────────────┐                                                   │
-│  │ Budget Check │  Rejects if spentUsd ≥ limitUsd                  │
-│  │(BudgetService)                                                   │
-│  └──────┬───────┘                                                   │
-│         │                                                           │
-│         ▼                                                           │
-│  ┌──────────────┐                                                   │
-│  │ Rate Limiter │  Per-tenant request rate enforcement              │
-│  │(Resilience4j)                                                    │
-│  └──────┬───────┘                                                   │
-│         │                                                           │
-│         ▼                                                           │
-│  ┌──────────────┐   Hit?                                            │
-│  │    Cache     │ ──────► Return cached ChatResponse                │
-│  │(Redis SHA256)│                                                   │
-│  └──────┬───────┘                                                   │
-│         │ Miss                                                      │
-│         ▼                                                           │
-│  ┌──────────────┐                                                   │
-│  │    Router    │  PRIORITY / COST / LATENCY strategy               │
-│  │(RoutingService)                                                  │
-│  └──────┬───────┘                                                   │
-│         │                                                           │
-│    ┌────┴─────┐                                                     │
-│    ▼          ▼                                                     │
-│ ┌──────┐  ┌────────┐                                                │
-│ │ Groq │  │ OpenAI │  Circuit-breaker + Retry per provider          │
-│ └──────┘  └────────┘                                                │
-│    │          │                                                     │
-│    └────┬─────┘                                                     │
-│         │                                                           │
-│         ▼                                                           │
-│  ┌──────────────┐                                                   │
-│  │   Response   │  Enriched with GatewayMeta (provider, latency,    │
-│  │  + Logging   │  cacheHit). Usage logged async to PostgreSQL.     │
-│  └──────────────┘                                                   │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LLM Gateway v1.0                                │
+│                                                                         │
+│  Client Request                                                         │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Auth Filter] → API Key validation → Tenant resolution                 │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Rate Limiter] → Redis fixed-window counter (10/60/300 req/min)        │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Budget Check] → PostgreSQL spend vs limit                             │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Cache Lookup] → Redis exact-match (tenant-isolated, 1hr TTL)          │
+│       │ miss                                                            │
+│       ▼                                                                 │
+│  [Router] → Tenant policy → COST / LATENCY / PRIORITY                  │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Provider] → Groq / OpenAI                                             │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Cost Calc] → pricing engine → cost calculation                        │
+│       │                                                                 │
+│       ▼                                                                 │
+│  [Async Pipeline] → Cache write + Usage log + Budget deduct             │
+│       │                                                                 │
+│       ▼                                                                 │
+│  Response + X-RateLimit-Remaining header                                │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -160,17 +143,24 @@ docker compose down -v
 
 ## API Endpoints
 
-| Method | Path                              | Description                              | Auth     |
-|--------|-----------------------------------|------------------------------------------|----------|
-| POST   | `/api/v1/chat/completions`        | OpenAI-compatible chat completion        | API Key  |
-| GET    | `/api/v1/health/providers`        | Provider health status map               | None     |
-| GET    | `/api/v1/admin/tenants`           | List all tenants                         | Admin    |
-| POST   | `/api/v1/admin/tenants`           | Create a new tenant                      | Admin    |
-| GET    | `/api/v1/admin/analytics`         | Usage analytics summary                  | Admin    |
-| GET    | `/swagger-ui.html`                | Interactive API documentation            | None     |
-| GET    | `/api-docs`                       | Raw OpenAPI 3 JSON spec                  | None     |
-| GET    | `/actuator/health`                | Spring Boot health check                 | None     |
-| GET    | `/actuator/prometheus`            | Prometheus metrics scrape endpoint       | None     |
+| Method | Path                                                    | Description                              | Auth     |
+|--------|---------------------------------------------------------|------------------------------------------|----------|
+| POST   | `/api/v1/chat/completions`                              | OpenAI-compatible chat completion        | API Key  |
+| GET    | `/api/v1/health/providers`                              | Provider health status map               | None     |
+| POST   | `/api/v1/admin/tenants`                                 | Create a new tenant                      | API Key  |
+| GET    | `/api/v1/admin/tenants`                                 | List all tenants                         | API Key  |
+| POST   | `/api/v1/admin/tenants/{tenantId}/keys`                 | Generate an API key for a tenant         | API Key  |
+| GET    | `/api/v1/admin/tenants/{tenantId}/keys`                 | List API keys for a tenant               | API Key  |
+| DELETE | `/api/v1/admin/keys/{keyId}`                            | Revoke an API key                        | API Key  |
+| GET    | `/api/v1/admin/tenants/{tenantId}/routing-policy`       | Get tenant routing policy                | API Key  |
+| PUT    | `/api/v1/admin/tenants/{tenantId}/routing-policy`       | Update tenant routing policy             | API Key  |
+| GET    | `/api/v1/admin/analytics/usage`                         | Usage logs for a tenant (date range)     | API Key  |
+| GET    | `/api/v1/admin/analytics/by-provider`                   | Aggregated cost by provider              | API Key  |
+| GET    | `/api/v1/admin/analytics/budget/{tenantId}`             | Budget status for a tenant               | API Key  |
+| GET    | `/swagger-ui.html`                                      | Interactive API documentation            | None     |
+| GET    | `/api-docs`                                             | Raw OpenAPI 3 JSON spec                  | None     |
+| GET    | `/actuator/health`                                      | Spring Boot health check                 | None     |
+| GET    | `/actuator/prometheus`                                  | Prometheus metrics scrape endpoint       | None     |
 
 ---
 
@@ -255,22 +245,26 @@ llm-gateway/
 
 ## Roadmap
 
-### Phase 1 — Foundation (M1–M5)
-- [x] **M1** — Project scaffold: entities, config, package structure
-- [ ] **M2** — API-key authentication + tenant management REST API
-- [ ] **M3** — Groq & OpenAI provider integration (circuit-breaker, retry)
-- [ ] **M4** — Streaming SSE support + routing strategy selection
-- [ ] **M5** — Redis semantic cache (SHA-256 exact match)
+### Phase 1 — Complete ✅
 
-### Phase 2 — Production Hardening (M6–M13)
-- [ ] **M6** — Per-tenant budget enforcement
-- [ ] **M7** — Resilience4j rate limiter per tenant/plan
-- [ ] **M8** — Analytics dashboard (cost, tokens, provider split)
-- [ ] **M9** — Prometheus metrics + Grafana dashboards
-- [ ] **M10** — Admin UI (Next.js)
-- [ ] **M11** — Testcontainers integration test suite
-- [ ] **M12** — Docker image + Kubernetes Helm chart
-- [ ] **M13** — Semantic cache (embedding-based similarity search)
+| Module | Feature | Status |
+|--------|---------|--------|
+| M1 | Foundation & Infrastructure | ✅ Complete |
+| M2 | Tenant & API Key Authentication | ✅ Complete |
+| M3 | LLM Provider Abstraction (Groq + OpenAI) | ✅ Complete |
+| M4 | Full Gateway Pipeline | ✅ Complete |
+| M5 | Routing Engine | ✅ Complete |
+
+### Phase 2 — Planned
+
+| Module | Feature | Status |
+|--------|---------|--------|
+| Playground | UI/console — prompt, stream, cost display | 🔄 Planned |
+| Admin Dashboard | Metrics, cost charts, provider usage | 🔄 Planned |
+| Semantic Cache | pgvector + embedding similarity | 🔄 Planned |
+| Anthropic Provider | Claude integration | 🔄 Planned |
+| Dynamic Routing | Real latency-based auto-switching | 🔄 Planned |
+| Kafka Analytics | Event-driven usage pipeline | 🔄 Planned |
 
 ---
 

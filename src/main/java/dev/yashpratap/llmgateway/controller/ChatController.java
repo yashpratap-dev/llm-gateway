@@ -12,6 +12,7 @@ import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.GatewayMeta;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
 import dev.yashpratap.llmgateway.provider.Usage;
+import dev.yashpratap.llmgateway.routing.LatencyRouter;
 import dev.yashpratap.llmgateway.routing.RoutingPolicyService;
 import dev.yashpratap.llmgateway.routing.RoutingService;
 import dev.yashpratap.llmgateway.routing.RoutingStrategy;
@@ -53,6 +54,7 @@ public class ChatController {
     private final CostCalculator costCalculator;
     private final UsageLogger usageLogger;
     private final TenantContext tenantContext;
+    private final LatencyRouter latencyRouter;
 
     /**
      * Constructs the controller with all required pipeline dependencies.
@@ -65,6 +67,7 @@ public class ChatController {
      * @param costCalculator       calculates USD cost from token counts and model pricing
      * @param usageLogger          persists usage log entries asynchronously
      * @param tenantContext        request-scoped holder for the authenticated tenant
+     * @param latencyRouter        updates rolling average latency after each successful provider call
      */
     public ChatController(RoutingService routingService,
                           RoutingPolicyService routingPolicyService,
@@ -73,7 +76,8 @@ public class ChatController {
                           RedisCacheService redisCacheService,
                           CostCalculator costCalculator,
                           UsageLogger usageLogger,
-                          TenantContext tenantContext) {
+                          TenantContext tenantContext,
+                          LatencyRouter latencyRouter) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.rateLimiterService = rateLimiterService;
@@ -82,6 +86,7 @@ public class ChatController {
         this.costCalculator = costCalculator;
         this.usageLogger = usageLogger;
         this.tenantContext = tenantContext;
+        this.latencyRouter = latencyRouter;
     }
 
     /**
@@ -141,6 +146,7 @@ public class ChatController {
             throw e;
         }
         long latencyMs = System.currentTimeMillis() - startMs;
+        latencyRouter.updateLatency(provider.name(), latencyMs);
 
         // 7. Cost
         double costUsd = costCalculator.calculate(provider.name().name(), response.model(),

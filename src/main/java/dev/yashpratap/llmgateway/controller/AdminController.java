@@ -1,6 +1,9 @@
 package dev.yashpratap.llmgateway.controller;
 
 import dev.yashpratap.llmgateway.common.ApiResponse;
+import dev.yashpratap.llmgateway.routing.RoutingPolicyService;
+import dev.yashpratap.llmgateway.routing.dto.RoutingPolicyResponse;
+import dev.yashpratap.llmgateway.routing.dto.UpdateRoutingPolicyRequest;
 import dev.yashpratap.llmgateway.tenant.TenantService;
 import dev.yashpratap.llmgateway.tenant.dto.ApiKeyResponse;
 import dev.yashpratap.llmgateway.tenant.dto.CreateApiKeyRequest;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,14 +38,18 @@ import java.util.UUID;
 public class AdminController {
 
     private final TenantService tenantService;
+    private final RoutingPolicyService routingPolicyService;
 
     /**
-     * Constructs the controller with its service dependency.
+     * Constructs the controller with its service dependencies.
      *
-     * @param tenantService the tenant and API key management service
+     * @param tenantService        the tenant and API key management service
+     * @param routingPolicyService the routing policy read/update service
      */
-    public AdminController(TenantService tenantService) {
+    public AdminController(TenantService tenantService,
+                           RoutingPolicyService routingPolicyService) {
         this.tenantService = tenantService;
+        this.routingPolicyService = routingPolicyService;
     }
 
     /**
@@ -115,5 +123,35 @@ public class AdminController {
     public ResponseEntity<ApiResponse<ApiKeyResponse>> revokeApiKey(@PathVariable UUID keyId) {
         ApiKeyResponse response = tenantService.revokeApiKey(keyId);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Returns the current routing policy for the specified tenant.
+     * Falls back to PRIORITY strategy if no policy is configured.
+     *
+     * @param tenantId the UUID of the tenant
+     * @return {@code 200 OK} with the tenant's current {@link RoutingPolicyResponse}
+     */
+    @GetMapping("/tenants/{tenantId}/routing-policy")
+    public ResponseEntity<ApiResponse<RoutingPolicyResponse>> getRoutingPolicy(
+            @PathVariable UUID tenantId) {
+        RoutingPolicyResponse policy = routingPolicyService.getPolicyForTenant(tenantId);
+        return ResponseEntity.ok(ApiResponse.success(policy));
+    }
+
+    /**
+     * Updates the routing policy for the specified tenant.
+     * Valid strategies: COST, LATENCY, PRIORITY
+     *
+     * @param tenantId the UUID of the tenant
+     * @param request  validated request body containing the new strategy
+     * @return {@code 200 OK} with the updated {@link RoutingPolicyResponse}
+     */
+    @PutMapping("/tenants/{tenantId}/routing-policy")
+    public ResponseEntity<ApiResponse<RoutingPolicyResponse>> updateRoutingPolicy(
+            @PathVariable UUID tenantId,
+            @Valid @RequestBody UpdateRoutingPolicyRequest request) {
+        RoutingPolicyResponse policy = routingPolicyService.updatePolicy(tenantId, request.strategy());
+        return ResponseEntity.ok(ApiResponse.success(policy));
     }
 }
