@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.yashpratap.llmgateway.billing.UsageLogger;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.Choice;
 import dev.yashpratap.llmgateway.provider.GatewayMeta;
@@ -38,25 +42,30 @@ import java.util.UUID;
 @Service
 public class StreamingChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(StreamingChatService.class);
+
     private final RoutingService routingService;
     private final RoutingPolicyService routingPolicyService;
     private final LatencyRouter latencyRouter;
     private final RedisCacheService redisCacheService;
     private final UsageLogger usageLogger;
     private final ObjectMapper objectMapper;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     public StreamingChatService(RoutingService routingService,
                                 RoutingPolicyService routingPolicyService,
                                 LatencyRouter latencyRouter,
                                 RedisCacheService redisCacheService,
                                 UsageLogger usageLogger,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                CircuitBreakerRegistry circuitBreakerRegistry) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.latencyRouter = latencyRouter;
         this.redisCacheService = redisCacheService;
         this.usageLogger = usageLogger;
         this.objectMapper = objectMapper;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
     }
 
     public Flux<ServerSentEvent<String>> stream(UUID tenantId, UUID apiKeyId,
@@ -77,6 +86,16 @@ public class StreamingChatService {
         RoutingStrategy strategy = routingPolicyService.getStrategyForTenant(tenantId);
         LLMProvider provider = routingService.route(request, strategy);
         String providerName = provider.name().name();
+
+        String instanceName = provider.name().name().toLowerCase() + "-provider";
+        CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(instanceName);
+        if (cb.getState() == CircuitBreaker.State.OPEN) {
+            log.warn("[resilience] streaming provider={} circuit=OPEN", provider.name());
+            return Flux.just(sse("error", new StreamErrorEvent(
+                    "Provider " + providerName + " is temporarily unavailable (circuit open)",
+                    "CIRCUIT_OPEN")));
+        }
+
         long startMs = System.currentTimeMillis();
         StringBuilder accumulated = new StringBuilder();
 

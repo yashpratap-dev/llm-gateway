@@ -45,6 +45,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
   prometheus:
     metrics:
       export:
@@ -82,6 +85,24 @@ resilience4j:
         failureRateThreshold: 50
         waitDurationInOpenState: 30s
         permittedNumberOfCallsInHalfOpenState: 3
+      groq-provider:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+      openai-provider:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
   retry:
     instances:
       groq:
@@ -94,6 +115,18 @@ resilience4j:
         waitDuration: 1s
         enableExponentialBackoff: true
         exponentialBackoffMultiplier: 2
+      groq-provider:
+        maxAttempts: 3
+        waitDuration: 500ms
+        retryExceptions:
+          - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
+          - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
+      openai-provider:
+        maxAttempts: 3
+        waitDuration: 500ms
+        retryExceptions:
+          - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
+          - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
   timelimiter:
     instances:
       groq:

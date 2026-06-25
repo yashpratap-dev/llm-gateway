@@ -12,6 +12,7 @@ import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.GatewayMeta;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
 import dev.yashpratap.llmgateway.provider.Usage;
+import dev.yashpratap.llmgateway.resilience.ResilienceService;
 import dev.yashpratap.llmgateway.routing.LatencyRouter;
 import dev.yashpratap.llmgateway.routing.RoutingPolicyService;
 import dev.yashpratap.llmgateway.routing.RoutingService;
@@ -60,6 +61,7 @@ public class ChatController {
     private final TenantContext tenantContext;
     private final LatencyRouter latencyRouter;
     private final StreamingChatService streamingChatService;
+    private final ResilienceService resilienceService;
 
     /**
      * Constructs the controller with all required pipeline dependencies.
@@ -74,6 +76,7 @@ public class ChatController {
      * @param tenantContext        request-scoped holder for the authenticated tenant
      * @param latencyRouter        updates rolling average latency after each successful provider call
      * @param streamingChatService handles SSE streaming completions
+     * @param resilienceService    wraps provider calls with Circuit Breaker and Retry
      */
     public ChatController(RoutingService routingService,
                           RoutingPolicyService routingPolicyService,
@@ -84,7 +87,8 @@ public class ChatController {
                           UsageLogger usageLogger,
                           TenantContext tenantContext,
                           LatencyRouter latencyRouter,
-                          StreamingChatService streamingChatService) {
+                          StreamingChatService streamingChatService,
+                          ResilienceService resilienceService) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.rateLimiterService = rateLimiterService;
@@ -95,6 +99,7 @@ public class ChatController {
         this.tenantContext = tenantContext;
         this.latencyRouter = latencyRouter;
         this.streamingChatService = streamingChatService;
+        this.resilienceService = resilienceService;
     }
 
     /**
@@ -146,7 +151,7 @@ public class ChatController {
         long startMs = System.currentTimeMillis();
         ChatResponse response;
         try {
-            response = provider.generate(request);
+            response = resilienceService.executeWithResilience(provider, request);
         } catch (Exception e) {
             long latencyMs = System.currentTimeMillis() - startMs;
             usageLogger.log(tenantId, apiKeyId, provider.name().name(), request.model(),

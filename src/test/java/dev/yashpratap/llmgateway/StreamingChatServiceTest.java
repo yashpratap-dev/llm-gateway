@@ -3,6 +3,7 @@ package dev.yashpratap.llmgateway;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.yashpratap.llmgateway.billing.UsageLogger;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import dev.yashpratap.llmgateway.provider.ChatChunk;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
@@ -51,6 +52,7 @@ class StreamingChatServiceTest {
 
     private StreamingChatService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final CircuitBreakerRegistry circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
 
     private final UUID tenantId = UUID.randomUUID();
     private final UUID apiKeyId = UUID.randomUUID();
@@ -59,7 +61,7 @@ class StreamingChatServiceTest {
     @BeforeEach
     void setUp() {
         service = new StreamingChatService(routingService, routingPolicyService, latencyRouter,
-                redisCacheService, usageLogger, objectMapper);
+                redisCacheService, usageLogger, objectMapper, circuitBreakerRegistry);
     }
 
     @Test

@@ -2,12 +2,14 @@ package dev.yashpratap.llmgateway.routing;
 
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
+import dev.yashpratap.llmgateway.provider.ProviderName;
 import dev.yashpratap.llmgateway.provider.ProviderRegistry;
 import dev.yashpratap.llmgateway.provider.exception.ProviderException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -53,5 +55,20 @@ public class RoutingService {
         }
         Router router = routerMap.getOrDefault(strategy, routerMap.get(RoutingStrategy.PRIORITY));
         return router.route(request, healthyProviders);
+    }
+
+    /**
+     * Returns the next available healthy provider excluding the specified one.
+     * Used by ResilienceService for fallback — routing policy is still respected
+     * because this method uses the same provider list as route().
+     *
+     * @param excluding the provider name to exclude (the failed primary)
+     * @param request   the original chat request (used for routing decisions)
+     * @return the next healthy provider, or empty if none available
+     */
+    public Optional<LLMProvider> getNextProvider(ProviderName excluding, ChatRequest request) {
+        return providerRegistry.getHealthyProviders().stream()
+                .filter(p -> p.name() != excluding)
+                .findFirst();
     }
 }
