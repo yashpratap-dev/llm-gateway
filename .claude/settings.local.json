@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "PowerShell(java *)",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "PowerShell(npm *)",
+      "PowerShell(Receive-Job *)"
     ]
   }
 }

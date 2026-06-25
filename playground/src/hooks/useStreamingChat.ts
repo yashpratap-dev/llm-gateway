@@ -66,9 +66,8 @@ export function useStreamingChat() {
       const decoder = new TextDecoder();
       let accumulated = '';
 
-      const parser = createParser((event) => {
-        if (event.type !== 'event') return;
-
+      const parser = createParser({
+        onEvent: (event) => {
         if (event.event === 'token') {
           const data = JSON.parse(event.data) as StreamTokenEvent;
           accumulated += data.delta;
@@ -116,6 +115,7 @@ export function useStreamingChat() {
             return next;
           });
           setIsStreaming(false);
+        }
         }
       });
 
