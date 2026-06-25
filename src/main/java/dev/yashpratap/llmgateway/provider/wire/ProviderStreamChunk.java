@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.provider.wire;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.List;
  * @param id      unique chunk identifier (matches the parent response id)
  * @param choices list of delta choices; each carries the incremental text fragment
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ProviderStreamChunk(
         @JsonProperty("id") String id,
         @JsonProperty("choices") List<ProviderChoice> choices

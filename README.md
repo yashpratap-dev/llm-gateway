@@ -268,6 +268,14 @@ llm-gateway/
 
 ---
 
+## Known Limitations
+
+| Limitation | Details | Planned Fix |
+|-----------|---------|-------------|
+| Streaming token tracking | Token usage and cost are not tracked for streamed requests | Planned in later module |
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.

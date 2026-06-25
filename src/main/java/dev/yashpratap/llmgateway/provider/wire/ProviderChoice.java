@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.provider.wire;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param finishReason reason the model stopped generating (e.g. {@code stop}, {@code length})
  * @param delta        incremental text fragment (streaming only; null in non-streaming responses)
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ProviderChoice(
         @JsonProperty("index") int index,
         @JsonProperty("message") ProviderMessage message,

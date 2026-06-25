@@ -16,13 +16,17 @@ import dev.yashpratap.llmgateway.routing.LatencyRouter;
 import dev.yashpratap.llmgateway.routing.RoutingPolicyService;
 import dev.yashpratap.llmgateway.routing.RoutingService;
 import dev.yashpratap.llmgateway.routing.RoutingStrategy;
+import dev.yashpratap.llmgateway.streaming.StreamingChatService;
 import dev.yashpratap.llmgateway.tenant.TenantContext;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -55,6 +59,7 @@ public class ChatController {
     private final UsageLogger usageLogger;
     private final TenantContext tenantContext;
     private final LatencyRouter latencyRouter;
+    private final StreamingChatService streamingChatService;
 
     /**
      * Constructs the controller with all required pipeline dependencies.
@@ -68,6 +73,7 @@ public class ChatController {
      * @param usageLogger          persists usage log entries asynchronously
      * @param tenantContext        request-scoped holder for the authenticated tenant
      * @param latencyRouter        updates rolling average latency after each successful provider call
+     * @param streamingChatService handles SSE streaming completions
      */
     public ChatController(RoutingService routingService,
                           RoutingPolicyService routingPolicyService,
@@ -77,7 +83,8 @@ public class ChatController {
                           CostCalculator costCalculator,
                           UsageLogger usageLogger,
                           TenantContext tenantContext,
-                          LatencyRouter latencyRouter) {
+                          LatencyRouter latencyRouter,
+                          StreamingChatService streamingChatService) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.rateLimiterService = rateLimiterService;
@@ -87,6 +94,7 @@ public class ChatController {
         this.usageLogger = usageLogger;
         this.tenantContext = tenantContext;
         this.latencyRouter = latencyRouter;
+        this.streamingChatService = streamingChatService;
     }
 
     /**
@@ -175,5 +183,31 @@ public class ChatController {
         return ResponseEntity.ok()
                 .header("X-RateLimit-Remaining", String.valueOf(remaining))
                 .body(ApiResponse.success(finalResponse));
+    }
+
+    /**
+     * SSE streaming chat completions endpoint (text-only).
+     *
+     * Known limitation: token usage and cost are not tracked for streamed
+     * requests in this version. Deferred to a later module.
+     *
+     * Context (tenantId, apiKeyId, plan) is captured on the request thread
+     * before the Flux is returned — @RequestScope TenantContext and
+     * SecurityContext are unavailable on reactive threads.
+     */
+    @PostMapping(value = "/completions/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamCompletions(
+            @Valid @RequestBody ChatRequest request) {
+
+        UUID tenantId = tenantContext.getTenantId();
+        UUID apiKeyId = tenantContext.getApiKeyId();
+        String plan = tenantContext.getTenant().getPlan();
+
+        if (!rateLimiterService.isAllowed(tenantId, plan)) {
+            throw new RateLimitException("Rate limit exceeded for plan " + plan);
+        }
+        budgetService.checkBudget(tenantId);
+
+        return streamingChatService.stream(tenantId, apiKeyId, plan, request);
     }
 }
