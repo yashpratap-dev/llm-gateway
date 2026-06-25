@@ -31,17 +31,21 @@ public class AnalyticsController {
 
     private final UsageLogRepository usageLogRepository;
     private final BudgetRepository budgetRepository;
+    private final AnalyticsOverviewService analyticsOverviewService;
 
     /**
-     * Constructs the controller with its repository dependencies.
+     * Constructs the controller with its repository and service dependencies.
      *
-     * @param usageLogRepository repository for querying usage log entries
-     * @param budgetRepository   repository for querying tenant budgets
+     * @param usageLogRepository      repository for querying usage log entries
+     * @param budgetRepository        repository for querying tenant budgets
+     * @param analyticsOverviewService service for computing aggregated overview stats
      */
     public AnalyticsController(UsageLogRepository usageLogRepository,
-                               BudgetRepository budgetRepository) {
+                               BudgetRepository budgetRepository,
+                               AnalyticsOverviewService analyticsOverviewService) {
         this.usageLogRepository = usageLogRepository;
         this.budgetRepository = budgetRepository;
+        this.analyticsOverviewService = analyticsOverviewService;
     }
 
     /**
@@ -97,5 +101,17 @@ public class AnalyticsController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 new BudgetSummary(budget.getLimitUsd(), budget.getSpentUsd(), remaining)));
+    }
+
+    /**
+     * Returns aggregated overview statistics for the admin dashboard.
+     * Delegates all computation to {@link AnalyticsOverviewService}.
+     *
+     * @return overview stats: total requests, cost, cache ratio, tenant count, provider breakdown
+     */
+    @GetMapping("/overview")
+    public ResponseEntity<ApiResponse<OverviewResponse>> getOverview() {
+        OverviewResponse overview = analyticsOverviewService.getOverview();
+        return ResponseEntity.ok(ApiResponse.success(overview));
     }
 }

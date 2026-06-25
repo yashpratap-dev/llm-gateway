@@ -52,4 +52,17 @@ public interface UsageLogRepository extends JpaRepository<UsageLog, UUID> {
      */
     @Query("SELECT COALESCE(SUM(u.costUsd), 0) FROM UsageLog u WHERE u.tenantId = :tenantId")
     Double findTotalCostByTenant(@Param("tenantId") UUID tenantId);
+
+    /**
+     * Returns the sum of all costs across all tenants and providers.
+     * Returns 0.0 (via COALESCE) when no records exist.
+     */
+    @Query("SELECT COALESCE(SUM(u.costUsd), 0) FROM UsageLog u")
+    Double findTotalCostAllTenants();
+
+    /**
+     * Returns the count of requests that were served from cache.
+     */
+    @Query("SELECT COUNT(u) FROM UsageLog u WHERE u.cacheHit = true")
+    long countCacheHits();
 }
