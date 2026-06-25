@@ -164,6 +164,35 @@ docker compose down -v
 
 ---
 
+## Playground
+
+A FRIDAY-style developer playground for testing the LLM Gateway interactively.
+
+**Requirements:** Node.js >=18, npm >=9
+
+**Start:**
+```bash
+# Terminal 1 — backend
+cd D:\llm-gateway
+docker compose up -d
+# Run Spring Boot from IntelliJ
+
+# Terminal 2 — frontend
+cd playground
+npm install
+npm run dev
+```
+
+Open **http://localhost:3001**
+
+**Features:**
+- SSE token-by-token streaming
+- Cache hit detection (CACHED indicator)
+- Provider + latency display per response
+- Conversation history maintained across messages
+
+---
+
 ## Project Structure
 
 ```
