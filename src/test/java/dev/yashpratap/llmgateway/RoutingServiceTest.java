@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway;
 
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
 import dev.yashpratap.llmgateway.provider.Message;
@@ -10,6 +11,7 @@ import dev.yashpratap.llmgateway.routing.CostRouter;
 import dev.yashpratap.llmgateway.routing.PriorityRouter;
 import dev.yashpratap.llmgateway.routing.RoutingService;
 import dev.yashpratap.llmgateway.routing.RoutingStrategy;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,7 +47,8 @@ class RoutingServiceTest {
     void setUp() {
         PriorityRouter priorityRouter = new PriorityRouter();
         CostRouter costRouter = new CostRouter();
-        routingService = new RoutingService(providerRegistry, List.of(priorityRouter, costRouter));
+        routingService = new RoutingService(providerRegistry, List.of(priorityRouter, costRouter),
+                new GatewayMetricsService(new SimpleMeterRegistry()));
         lenient().when(groqProvider.name()).thenReturn(ProviderName.GROQ);
         lenient().when(openaiProvider.name()).thenReturn(ProviderName.OPENAI);
     }

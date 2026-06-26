@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.routing;
 
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
 import dev.yashpratap.llmgateway.provider.ProviderName;
@@ -24,17 +25,14 @@ public class RoutingService {
 
     private final ProviderRegistry providerRegistry;
     private final Map<RoutingStrategy, Router> routerMap;
+    private final GatewayMetricsService metricsService;
 
-    /**
-     * Constructs the routing service.
-     *
-     * @param providerRegistry registry that supplies the healthy provider pool
-     * @param routers          all {@link Router} implementations in the application context
-     */
-    public RoutingService(ProviderRegistry providerRegistry, List<Router> routers) {
+    public RoutingService(ProviderRegistry providerRegistry, List<Router> routers,
+                          GatewayMetricsService metricsService) {
         this.providerRegistry = providerRegistry;
         this.routerMap = routers.stream()
                 .collect(Collectors.toMap(Router::strategy, r -> r));
+        this.metricsService = metricsService;
     }
 
     /**
@@ -54,7 +52,9 @@ public class RoutingService {
             throw new ProviderException("No healthy providers available");
         }
         Router router = routerMap.getOrDefault(strategy, routerMap.get(RoutingStrategy.PRIORITY));
-        return router.route(request, healthyProviders);
+        LLMProvider selected = router.route(request, healthyProviders);
+        metricsService.recordProviderSelection(selected.name().name(), strategy.name());
+        return selected;
     }
 
     /**

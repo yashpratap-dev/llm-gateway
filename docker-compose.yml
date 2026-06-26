@@ -41,14 +41,19 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+    # host.docker.internal:host-gateway works on Docker Desktop (Windows/Mac).
+    # On Linux native Docker, put the Spring Boot app on a shared Docker network
+    # and use the service name (e.g. llm-gateway:8081) instead.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:latest
     container_name: llmgateway-grafana
     ports:
-      - "3001:3000"
+      - "3003:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:

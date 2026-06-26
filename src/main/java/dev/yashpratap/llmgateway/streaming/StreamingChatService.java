@@ -3,6 +3,7 @@ package dev.yashpratap.llmgateway.streaming;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.yashpratap.llmgateway.billing.UsageLogger;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -51,6 +52,7 @@ public class StreamingChatService {
     private final UsageLogger usageLogger;
     private final ObjectMapper objectMapper;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
+    private final GatewayMetricsService metricsService;
 
     public StreamingChatService(RoutingService routingService,
                                 RoutingPolicyService routingPolicyService,
@@ -58,7 +60,8 @@ public class StreamingChatService {
                                 RedisCacheService redisCacheService,
                                 UsageLogger usageLogger,
                                 ObjectMapper objectMapper,
-                                CircuitBreakerRegistry circuitBreakerRegistry) {
+                                CircuitBreakerRegistry circuitBreakerRegistry,
+                                GatewayMetricsService metricsService) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.latencyRouter = latencyRouter;
@@ -66,6 +69,7 @@ public class StreamingChatService {
         this.usageLogger = usageLogger;
         this.objectMapper = objectMapper;
         this.circuitBreakerRegistry = circuitBreakerRegistry;
+        this.metricsService = metricsService;
     }
 
     public Flux<ServerSentEvent<String>> stream(UUID tenantId, UUID apiKeyId,
@@ -91,6 +95,7 @@ public class StreamingChatService {
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(instanceName);
         if (cb.getState() == CircuitBreaker.State.OPEN) {
             log.warn("[resilience] streaming provider={} circuit=OPEN", provider.name());
+            metricsService.recordCircuitBreakerEvent(provider.name().name(), "OPEN");
             return Flux.just(sse("error", new StreamErrorEvent(
                     "Provider " + providerName + " is temporarily unavailable (circuit open)",
                     "CIRCUIT_OPEN")));
@@ -99,6 +104,7 @@ public class StreamingChatService {
         long startMs = System.currentTimeMillis();
         StringBuilder accumulated = new StringBuilder();
 
+        metricsService.recordStreamingRequest(provider.name().name());
         Flux<ServerSentEvent<String>> tokens = provider.stream(request)
                 .doOnNext(chunk -> {
                     if (chunk.delta() != null) accumulated.append(chunk.delta());

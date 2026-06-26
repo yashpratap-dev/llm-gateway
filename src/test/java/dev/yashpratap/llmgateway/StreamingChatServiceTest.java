@@ -3,7 +3,9 @@ package dev.yashpratap.llmgateway;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.yashpratap.llmgateway.billing.UsageLogger;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import dev.yashpratap.llmgateway.provider.ChatChunk;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
@@ -61,7 +63,8 @@ class StreamingChatServiceTest {
     @BeforeEach
     void setUp() {
         service = new StreamingChatService(routingService, routingPolicyService, latencyRouter,
-                redisCacheService, usageLogger, objectMapper, circuitBreakerRegistry);
+                redisCacheService, usageLogger, objectMapper, circuitBreakerRegistry,
+                new GatewayMetricsService(new SimpleMeterRegistry()));
     }
 
     @Test

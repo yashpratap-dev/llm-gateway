@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway;
 
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.Choice;
@@ -12,6 +13,7 @@ import dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException;
 import dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException;
 import dev.yashpratap.llmgateway.resilience.ResilienceService;
 import dev.yashpratap.llmgateway.routing.RoutingService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -68,7 +70,8 @@ class ResilienceServiceTest {
     }
 
     private ResilienceService buildService(CircuitBreakerRegistry cbRegistry, RetryRegistry retryRegistry) {
-        return new ResilienceService(cbRegistry, retryRegistry, routingService);
+        return new ResilienceService(cbRegistry, retryRegistry, routingService,
+                new GatewayMetricsService(new SimpleMeterRegistry()));
     }
 
     private CircuitBreakerRegistry defaultCbRegistry() {

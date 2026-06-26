@@ -7,6 +7,7 @@ import dev.yashpratap.llmgateway.cache.RateLimiterService;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
 import dev.yashpratap.llmgateway.common.ApiResponse;
 import dev.yashpratap.llmgateway.common.RateLimitException;
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.GatewayMeta;
@@ -62,6 +63,7 @@ public class ChatController {
     private final LatencyRouter latencyRouter;
     private final StreamingChatService streamingChatService;
     private final ResilienceService resilienceService;
+    private final GatewayMetricsService metricsService;
 
     /**
      * Constructs the controller with all required pipeline dependencies.
@@ -88,7 +90,8 @@ public class ChatController {
                           TenantContext tenantContext,
                           LatencyRouter latencyRouter,
                           StreamingChatService streamingChatService,
-                          ResilienceService resilienceService) {
+                          ResilienceService resilienceService,
+                          GatewayMetricsService metricsService) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.rateLimiterService = rateLimiterService;
@@ -100,6 +103,7 @@ public class ChatController {
         this.latencyRouter = latencyRouter;
         this.streamingChatService = streamingChatService;
         this.resilienceService = resilienceService;
+        this.metricsService = metricsService;
     }
 
     /**
@@ -119,75 +123,93 @@ public class ChatController {
         UUID apiKeyId = tenantContext.getApiKeyId();
         String plan = tenantContext.getTenant().getPlan();
 
-        // 1. Rate limit
-        if (!rateLimiterService.isAllowed(tenantId, plan)) {
-            throw new RateLimitException("Rate limit exceeded for plan " + plan);
-        }
-
-        // 2. Budget
-        budgetService.checkBudget(tenantId);
-
-        // 3. Cache (tenant-isolated)
-        Optional<ChatResponse> cached = redisCacheService.get(tenantId, request);
-        if (cached.isPresent()) {
-            ChatResponse c = cached.get();
-            usageLogger.log(tenantId, apiKeyId, c.provider(), c.model(),
-                    0, 0, 0.0, 0L, true, "SUCCESS");
-            ChatResponse hit = new ChatResponse(c.id(), c.model(), c.provider(),
-                    c.choices(), c.usage(), new GatewayMeta(c.provider(), true, 0L));
-            int rem = rateLimiterService.getRemainingRequests(tenantId, plan);
-            return ResponseEntity.ok()
-                    .header("X-RateLimit-Remaining", String.valueOf(rem))
-                    .body(ApiResponse.success(hit));
-        }
-
-        // 4. Routing strategy from DB
-        RoutingStrategy strategy = routingPolicyService.getStrategyForTenant(tenantId);
-
-        // 5. Route
-        LLMProvider provider = routingService.route(request, strategy);
-
-        // 6. Call provider — log FAILED and rethrow on exception
-        long startMs = System.currentTimeMillis();
-        ChatResponse response;
+        LLMProvider provider = null;
+        metricsService.incrementActiveRequests();
         try {
-            response = resilienceService.executeWithResilience(provider, request);
-        } catch (Exception e) {
+            // 1. Rate limit
+            if (!rateLimiterService.isAllowed(tenantId, plan)) {
+                throw new RateLimitException("Rate limit exceeded for plan " + plan);
+            }
+
+            // 2. Budget
+            budgetService.checkBudget(tenantId);
+
+            // 3. Cache (tenant-isolated)
+            Optional<ChatResponse> cached = redisCacheService.get(tenantId, request);
+            if (cached.isPresent()) {
+                ChatResponse c = cached.get();
+                usageLogger.log(tenantId, apiKeyId, c.provider(), c.model(),
+                        0, 0, 0.0, 0L, true, "SUCCESS");
+                ChatResponse hit = new ChatResponse(c.id(), c.model(), c.provider(),
+                        c.choices(), c.usage(), new GatewayMeta(c.provider(), true, 0L));
+                int rem = rateLimiterService.getRemainingRequests(tenantId, plan);
+                return ResponseEntity.ok()
+                        .header("X-RateLimit-Remaining", String.valueOf(rem))
+                        .body(ApiResponse.success(hit));
+            }
+
+            // 4. Routing strategy from DB
+            RoutingStrategy strategy = routingPolicyService.getStrategyForTenant(tenantId);
+
+            // 5. Route
+            provider = routingService.route(request, strategy);
+
+            // 6. Call provider — log FAILED and rethrow on exception
+            long startMs = System.currentTimeMillis();
+            ChatResponse response;
+            try {
+                response = resilienceService.executeWithResilience(provider, request);
+            } catch (Exception e) {
+                long latencyMs = System.currentTimeMillis() - startMs;
+                usageLogger.log(tenantId, apiKeyId, provider.name().name(), request.model(),
+                        0, 0, 0.0, latencyMs, false, "FAILED");
+                throw e;
+            }
             long latencyMs = System.currentTimeMillis() - startMs;
-            usageLogger.log(tenantId, apiKeyId, provider.name().name(), request.model(),
-                    0, 0, 0.0, latencyMs, false, "FAILED");
+            latencyRouter.updateLatency(provider.name(), latencyMs);
+
+            // 7. Cost
+            double costUsd = costCalculator.calculate(provider.name().name(), response.model(),
+                    response.usage().promptTokens(), response.usage().completionTokens());
+
+            // 8. Final response
+            ChatResponse finalResponse = new ChatResponse(
+                    response.id(), response.model(), provider.name().name(),
+                    response.choices(),
+                    new Usage(response.usage().promptTokens(), response.usage().completionTokens(), costUsd),
+                    new GatewayMeta(provider.name().name(), false, latencyMs));
+
+            // 9. Cache
+            redisCacheService.put(tenantId, request, finalResponse);
+
+            // 10. Log async
+            usageLogger.log(tenantId, apiKeyId, provider.name().name(), response.model(),
+                    response.usage().promptTokens(), response.usage().completionTokens(),
+                    costUsd, latencyMs, false, "SUCCESS");
+
+            // 11. Budget deduct async
+            budgetService.deductAsync(tenantId, costUsd);
+
+            // 12. Metrics
+            metricsService.recordRequest(
+                    finalResponse.provider(),
+                    latencyMs,
+                    finalResponse.gatewayMeta().cacheHit(),
+                    finalResponse.usage().costUsd());
+
+            // 13. Return
+            int remaining = rateLimiterService.getRemainingRequests(tenantId, plan);
+            return ResponseEntity.ok()
+                    .header("X-RateLimit-Remaining", String.valueOf(remaining))
+                    .body(ApiResponse.success(finalResponse));
+        } catch (Exception e) {
+            metricsService.recordError(
+                    provider != null ? provider.name().name() : "UNKNOWN",
+                    e.getClass().getSimpleName());
             throw e;
+        } finally {
+            metricsService.decrementActiveRequests();
         }
-        long latencyMs = System.currentTimeMillis() - startMs;
-        latencyRouter.updateLatency(provider.name(), latencyMs);
-
-        // 7. Cost
-        double costUsd = costCalculator.calculate(provider.name().name(), response.model(),
-                response.usage().promptTokens(), response.usage().completionTokens());
-
-        // 8. Final response
-        ChatResponse finalResponse = new ChatResponse(
-                response.id(), response.model(), provider.name().name(),
-                response.choices(),
-                new Usage(response.usage().promptTokens(), response.usage().completionTokens(), costUsd),
-                new GatewayMeta(provider.name().name(), false, latencyMs));
-
-        // 9. Cache
-        redisCacheService.put(tenantId, request, finalResponse);
-
-        // 10. Log async
-        usageLogger.log(tenantId, apiKeyId, provider.name().name(), response.model(),
-                response.usage().promptTokens(), response.usage().completionTokens(),
-                costUsd, latencyMs, false, "SUCCESS");
-
-        // 11. Budget deduct async
-        budgetService.deductAsync(tenantId, costUsd);
-
-        // 12. Return
-        int remaining = rateLimiterService.getRemainingRequests(tenantId, plan);
-        return ResponseEntity.ok()
-                .header("X-RateLimit-Remaining", String.valueOf(remaining))
-                .body(ApiResponse.success(finalResponse));
     }
 
     /**

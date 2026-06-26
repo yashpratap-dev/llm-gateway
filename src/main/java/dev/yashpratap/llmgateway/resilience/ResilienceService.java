@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.resilience;
 
+import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
 import dev.yashpratap.llmgateway.provider.ChatRequest;
 import dev.yashpratap.llmgateway.provider.ChatResponse;
 import dev.yashpratap.llmgateway.provider.LLMProvider;
@@ -40,13 +41,16 @@ public class ResilienceService {
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final RetryRegistry retryRegistry;
     private final RoutingService routingService;
+    private final GatewayMetricsService metricsService;
 
     public ResilienceService(CircuitBreakerRegistry circuitBreakerRegistry,
                              RetryRegistry retryRegistry,
-                             RoutingService routingService) {
+                             RoutingService routingService,
+                             GatewayMetricsService metricsService) {
         this.circuitBreakerRegistry = circuitBreakerRegistry;
         this.retryRegistry = retryRegistry;
         this.routingService = routingService;
+        this.metricsService = metricsService;
         registerCircuitBreakerEventListeners();
     }
 
@@ -62,11 +66,15 @@ public class ResilienceService {
 
     private void attachListeners(CircuitBreaker cb) {
         cb.getEventPublisher()
-                .onStateTransition(e -> log.info(
-                        "[circuit-breaker] name={} transition={}→{}",
-                        cb.getName(),
-                        e.getStateTransition().getFromState(),
-                        e.getStateTransition().getToState()))
+                .onStateTransition(e -> {
+                    log.info("[circuit-breaker] name={} transition={}→{}",
+                            cb.getName(),
+                            e.getStateTransition().getFromState(),
+                            e.getStateTransition().getToState());
+                    metricsService.recordCircuitBreakerEvent(
+                            cb.getName(),
+                            e.getStateTransition().getToState().name());
+                })
                 .onFailureRateExceeded(e -> log.warn(
                         "[circuit-breaker] name={} failureRate={}",
                         cb.getName(), e.getFailureRate()))
@@ -91,6 +99,7 @@ public class ResilienceService {
         if (cb.getState() == CircuitBreaker.State.OPEN) {
             log.warn("[resilience] provider={} circuit=OPEN — skipping to fallback",
                     provider.name());
+            metricsService.recordCircuitBreakerEvent(provider.name().name(), "OPEN");
             return executeFallback(provider, request);
         }
 
@@ -121,6 +130,7 @@ public class ResilienceService {
         }
 
         LLMProvider fallback = fallbackOpt.get();
+        metricsService.recordFallback(failedProvider.name().name(), fallback.name().name());
         String fbInstance = instanceName(fallback);
         CircuitBreaker fbCb = circuitBreakerRegistry.circuitBreaker(fbInstance);
 
