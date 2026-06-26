@@ -152,6 +152,10 @@ cache:
     embedding-model-version: text-embedding-3-small
     embedding-cache:
       ttl: 24h
+    eviction:
+      # Spring 6-field cron: seconds minutes hours day month weekday
+      # Different from Linux cron which uses 5 fields (no seconds field)
+      cron: "0 0 * * * *"          # default: top of every hour
     embedding:
       model: text-embedding-3-small
       dimensions: 1536

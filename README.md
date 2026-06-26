@@ -193,6 +193,71 @@ Open **http://localhost:3001**
 
 ---
 
+## Semantic Cache (M8)
+
+Reduces LLM API cost by returning cached responses for semantically similar
+prompts using pgvector cosine similarity search.
+
+### How it works
+
+Pipeline (strict order):
+
+1. Exact Redis cache checked first — if hit, return immediately (no embedding call ever)
+2. Prompt normalized: system message + last 3 user/assistant pairs + current user message → trim → lowercase → collapse whitespace
+3. SHA256 of normalized prompt checked against Redis embedding cache (`emb:v1:{model}:{sha256}`)
+4. If embedding cache miss: call OpenAI `text-embedding-3-small` API (500 ms timeout)
+5. Embedding stored in Redis (TTL: 24 h, key includes model version for automatic invalidation on model upgrade)
+6. pgvector cosine similarity search against `semantic_cache_entries` table
+7. If best match similarity ≥ 0.92: return cached response (no LLM call)
+8. If miss: call LLM provider, store response + embedding asynchronously in PostgreSQL
+
+### Configuration
+
+```yaml
+cache:
+  semantic:
+    enabled: true
+    similarity-threshold: 0.92     # 0.0–1.0; higher = stricter matching
+    ttl-hours: 24
+    model-isolation: true          # false = allow cross-model cache reuse
+    embedding-model-version: text-embedding-3-small
+    eviction:
+      # Spring 6-field cron: seconds minutes hours day month weekday
+      # Different from Linux cron which uses 5 fields (no seconds field)
+      cron: "0 0 * * * *"          # default: top of every hour
+    embedding:
+      model: text-embedding-3-small
+      dimensions: 1536
+      timeout-ms: 500
+```
+
+### Requirements
+
+- PostgreSQL 16+ with pgvector extension (`CREATE EXTENSION IF NOT EXISTS vector`)
+- OpenAI API key (set in `providers.openai.api-key`)
+- Redis (already required by the gateway)
+
+### Metrics
+
+Micrometer uses dot notation internally (`llm.semantic.cache.hits`).
+Prometheus exports these as underscore notation automatically.
+
+| Prometheus Metric | Description |
+|---|---|
+| `llm_semantic_cache_hits_total` | Requests served from semantic cache |
+| `llm_semantic_cache_misses_total` | Semantic cache lookups that missed |
+| `llm_semantic_similarity_score` | Similarity score of matched entry (hits only) |
+| `llm_embedding_cache_hits_total` | Embedding vector served from Redis cache |
+| `llm_embedding_cache_misses_total` | Embedding vector had to be generated via API |
+
+### Current Limitations
+
+- M8A supports only `text-embedding-3-small` (1536 dimensions). A different embedding model requires a new Flyway migration.
+- Streaming requests (`/stream` endpoint) are not semantically cached. The exact Redis cache still applies to streaming.
+- Embedding cost is not deducted from tenant budget (tracked in analytics only).
+
+---
+
 ## Project Structure
 
 ```
