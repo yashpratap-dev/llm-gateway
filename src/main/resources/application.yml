@@ -142,6 +142,21 @@ resilience4j:
       openai:
         timeoutDuration: 30s
 
+cache:
+  semantic:
+    enabled: true
+    similarity-threshold: 0.92
+    ttl-hours: 24
+    max-entries-per-tenant: 10000
+    model-isolation: true
+    embedding-model-version: text-embedding-3-small
+    embedding-cache:
+      ttl: 24h
+    embedding:
+      model: text-embedding-3-small
+      dimensions: 1536
+      timeout-ms: 500
+
 logging:
   level:
     dev.yashpratap: DEBUG

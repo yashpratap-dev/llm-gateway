@@ -126,6 +126,46 @@ public class GatewayMetricsService {
         }
     }
 
+    public void recordSemanticCacheHit(String provider) {
+        try {
+            registry.counter("llm.semantic.cache.hits", "provider", safeProvider(provider)).increment();
+        } catch (Exception e) {
+            log.warn("[metrics] recordSemanticCacheHit failed: {}", e.getMessage());
+        }
+    }
+
+    public void recordSemanticCacheMiss() {
+        try {
+            registry.counter("llm.semantic.cache.misses").increment();
+        } catch (Exception e) {
+            log.warn("[metrics] recordSemanticCacheMiss failed: {}", e.getMessage());
+        }
+    }
+
+    public void recordSemanticSimilarityScore(double score) {
+        try {
+            registry.summary("llm.semantic.similarity.score").record(score);
+        } catch (Exception e) {
+            log.warn("[metrics] recordSemanticSimilarityScore failed: {}", e.getMessage());
+        }
+    }
+
+    public void recordEmbeddingCacheHit() {
+        try {
+            registry.counter("llm.embedding.cache.hits").increment();
+        } catch (Exception e) {
+            log.warn("[metrics] recordEmbeddingCacheHit failed: {}", e.getMessage());
+        }
+    }
+
+    public void recordEmbeddingCacheMiss() {
+        try {
+            registry.counter("llm.embedding.cache.misses").increment();
+        } catch (Exception e) {
+            log.warn("[metrics] recordEmbeddingCacheMiss failed: {}", e.getMessage());
+        }
+    }
+
     private String safeProvider(String provider) {
         return (provider != null && !provider.isBlank()) ? provider.toUpperCase() : "UNKNOWN";
     }

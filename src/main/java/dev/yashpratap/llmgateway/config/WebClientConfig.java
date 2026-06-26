@@ -71,6 +71,21 @@ public class WebClientConfig {
                 openAIProperties.timeoutSeconds());
     }
 
+    /**
+     * Creates a WebClient for the OpenAI embeddings endpoint, using the OpenAI API key.
+     * No connection-level timeout — callers apply per-request timeouts via Mono.timeout().
+     */
+    @Bean
+    @Qualifier("embeddingWebClient")
+    @ConditionalOnProperty(prefix = "providers.openai", name = "api-key")
+    public WebClient embeddingWebClient() {
+        return WebClient.builder()
+                .baseUrl(openAIProperties.baseUrl())
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAIProperties.apiKey())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+    }
+
     private WebClient buildWebClient(String baseUrl, String apiKey, int timeoutSeconds) {
         HttpClient httpClient = HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(timeoutSeconds));

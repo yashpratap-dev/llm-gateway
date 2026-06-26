@@ -5,6 +5,7 @@ import dev.yashpratap.llmgateway.billing.CostCalculator;
 import dev.yashpratap.llmgateway.billing.UsageLogger;
 import dev.yashpratap.llmgateway.cache.RateLimiterService;
 import dev.yashpratap.llmgateway.cache.RedisCacheService;
+import dev.yashpratap.llmgateway.cache.semantic.SemanticCacheService;
 import dev.yashpratap.llmgateway.common.ApiResponse;
 import dev.yashpratap.llmgateway.common.RateLimitException;
 import dev.yashpratap.llmgateway.metrics.GatewayMetricsService;
@@ -64,6 +65,7 @@ public class ChatController {
     private final StreamingChatService streamingChatService;
     private final ResilienceService resilienceService;
     private final GatewayMetricsService metricsService;
+    private final SemanticCacheService semanticCacheService;
 
     /**
      * Constructs the controller with all required pipeline dependencies.
@@ -91,7 +93,8 @@ public class ChatController {
                           LatencyRouter latencyRouter,
                           StreamingChatService streamingChatService,
                           ResilienceService resilienceService,
-                          GatewayMetricsService metricsService) {
+                          GatewayMetricsService metricsService,
+                          @org.springframework.lang.Nullable SemanticCacheService semanticCacheService) {
         this.routingService = routingService;
         this.routingPolicyService = routingPolicyService;
         this.rateLimiterService = rateLimiterService;
@@ -104,6 +107,7 @@ public class ChatController {
         this.streamingChatService = streamingChatService;
         this.resilienceService = resilienceService;
         this.metricsService = metricsService;
+        this.semanticCacheService = semanticCacheService;
     }
 
     /**
@@ -148,6 +152,22 @@ public class ChatController {
                         .body(ApiResponse.success(hit));
             }
 
+            // 3b. Semantic cache (only when exact cache missed)
+            if (semanticCacheService != null) {
+                Optional<ChatResponse> semanticHit = semanticCacheService.findSemanticMatch(tenantId, request);
+                if (semanticHit.isPresent()) {
+                    ChatResponse c = semanticHit.get();
+                    usageLogger.log(tenantId, apiKeyId, c.provider(), c.model(),
+                            0, 0, 0.0, 0L, true, "SUCCESS");
+                    ChatResponse hit = new ChatResponse(c.id(), c.model(), c.provider(),
+                            c.choices(), c.usage(), new GatewayMeta(c.provider(), true, 0L));
+                    int rem = rateLimiterService.getRemainingRequests(tenantId, plan);
+                    return ResponseEntity.ok()
+                            .header("X-RateLimit-Remaining", String.valueOf(rem))
+                            .body(ApiResponse.success(hit));
+                }
+            }
+
             // 4. Routing strategy from DB
             RoutingStrategy strategy = routingPolicyService.getStrategyForTenant(tenantId);
 
@@ -181,6 +201,11 @@ public class ChatController {
 
             // 9. Cache
             redisCacheService.put(tenantId, request, finalResponse);
+
+            // 9b. Semantic cache store (async, fire-and-forget)
+            if (semanticCacheService != null) {
+                semanticCacheService.storeSemanticEntry(tenantId, request, finalResponse);
+            }
 
             // 10. Log async
             usageLogger.log(tenantId, apiKeyId, provider.name().name(), response.model(),
