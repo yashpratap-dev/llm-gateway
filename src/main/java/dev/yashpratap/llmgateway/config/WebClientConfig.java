@@ -1,5 +1,6 @@
 package dev.yashpratap.llmgateway.config;
 
+import dev.yashpratap.llmgateway.provider.anthropic.AnthropicProperties;
 import dev.yashpratap.llmgateway.provider.groq.GroqProperties;
 import dev.yashpratap.llmgateway.provider.openai.OpenAIProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,16 +28,21 @@ public class WebClientConfig {
 
     private final GroqProperties groqProperties;
     private final OpenAIProperties openAIProperties;
+    private final AnthropicProperties anthropicProperties;
 
     /**
-     * Constructs the config with both sets of provider properties.
+     * Constructs the config with all provider properties.
      *
-     * @param groqProperties   bound Groq configuration
-     * @param openAIProperties bound OpenAI configuration
+     * @param groqProperties      bound Groq configuration
+     * @param openAIProperties    bound OpenAI configuration
+     * @param anthropicProperties bound Anthropic configuration
      */
-    public WebClientConfig(GroqProperties groqProperties, OpenAIProperties openAIProperties) {
+    public WebClientConfig(GroqProperties groqProperties,
+                           OpenAIProperties openAIProperties,
+                           AnthropicProperties anthropicProperties) {
         this.groqProperties = groqProperties;
         this.openAIProperties = openAIProperties;
+        this.anthropicProperties = anthropicProperties;
     }
 
     /**
@@ -83,6 +89,31 @@ public class WebClientConfig {
                 .baseUrl(openAIProperties.baseUrl())
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + openAIProperties.apiKey())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+    }
+
+    /**
+     * Creates the Anthropic-specific {@link WebClient}, only when
+     * {@code providers.anthropic.api-key} is set.
+     *
+     * <p>Anthropic uses {@code x-api-key} (not {@code Authorization: Bearer}),
+     * so this bean cannot reuse {@link #buildWebClient(String, String, int)}
+     * and is constructed inline with the same timeout pattern.</p>
+     *
+     * @return a {@link WebClient} pre-configured for the Anthropic Messages API
+     */
+    @Bean
+    @Qualifier("anthropicWebClient")
+    @ConditionalOnProperty(prefix = "providers.anthropic", name = "api-key")
+    public WebClient anthropicWebClient() {
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofSeconds(anthropicProperties.timeoutSeconds()));
+        return WebClient.builder()
+                .baseUrl(anthropicProperties.baseUrl())
+                .defaultHeader("x-api-key", anthropicProperties.apiKey())
+                .defaultHeader("anthropic-version", "2023-06-01")
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
     }
 

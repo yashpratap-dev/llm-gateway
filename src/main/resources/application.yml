@@ -79,6 +79,12 @@ providers:
     base-url: https://api.openai.com/v1
     model: gpt-4o-mini
     timeout-seconds: 30
+  anthropic:
+    api-key: ${ANTHROPIC_API_KEY:}
+    base-url: https://api.anthropic.com
+    default-model: claude-3-5-sonnet-20241022
+    timeout-seconds: 30
+    max-output-tokens: 1024
 
 resilience4j:
   circuitbreaker:
@@ -111,6 +117,15 @@ resilience4j:
         waitDurationInOpenState: 30s
         failureRateThreshold: 50
         eventConsumerBufferSize: 10
+      claude-provider:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
   retry:
     instances:
       groq:
@@ -130,6 +145,12 @@ resilience4j:
           - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
           - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
       openai-provider:
+        maxAttempts: 3
+        waitDuration: 500ms
+        retryExceptions:
+          - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
+          - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
+      claude-provider:
         maxAttempts: 3
         waitDuration: 500ms
         retryExceptions:

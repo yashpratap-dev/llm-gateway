@@ -12,5 +12,8 @@ public enum ProviderName {
     GROQ,
 
     /** OpenAI — GPT-4o family models. */
-    OPENAI
+    OPENAI,
+
+    /** Anthropic Claude family models. */
+    CLAUDE
 }

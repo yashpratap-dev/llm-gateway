@@ -176,6 +176,7 @@ public class GatewayMetricsService {
             return switch (ProviderName.valueOf(provider.toUpperCase())) {
                 case GROQ   -> "groq-llama";
                 case OPENAI -> "openai-gpt";
+                case CLAUDE -> "anthropic-claude";
             };
         } catch (IllegalArgumentException e) {
             return "unknown";
