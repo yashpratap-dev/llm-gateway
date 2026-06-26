@@ -21,7 +21,7 @@ import dev.yashpratap.llmgateway.provider.wire.ProviderStreamChunk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -51,7 +51,7 @@ import java.util.List;
  * M8 calculates the real cost from the {@code model_pricing} table.</p>
  */
 @Component
-@ConditionalOnProperty(prefix = "providers.openai", name = "api-key")
+@ConditionalOnExpression("'${providers.openai.api-key:}'.length() > 0")
 public class OpenAIProvider implements LLMProvider {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAIProvider.class);

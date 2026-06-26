@@ -17,7 +17,7 @@ import dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -40,7 +40,7 @@ import java.util.Map;
  * in the environment, so the application starts cleanly if Anthropic is not configured.</p>
  */
 @Service
-@ConditionalOnProperty(prefix = "providers.anthropic", name = "api-key")
+@ConditionalOnExpression("'${providers.anthropic.api-key:}'.length() > 0")
 public class AnthropicProvider implements LLMProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AnthropicProvider.class);

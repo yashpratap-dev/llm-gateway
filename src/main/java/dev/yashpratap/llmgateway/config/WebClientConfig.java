@@ -4,7 +4,7 @@ import dev.yashpratap.llmgateway.provider.anthropic.AnthropicProperties;
 import dev.yashpratap.llmgateway.provider.groq.GroqProperties;
 import dev.yashpratap.llmgateway.provider.openai.OpenAIProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -53,7 +53,7 @@ public class WebClientConfig {
      */
     @Bean
     @Qualifier("groqWebClient")
-    @ConditionalOnProperty(prefix = "providers.groq", name = "api-key")
+    @ConditionalOnExpression("'${providers.groq.api-key:}'.length() > 0")
     public WebClient groqWebClient() {
         return buildWebClient(
                 groqProperties.baseUrl(),
@@ -69,7 +69,7 @@ public class WebClientConfig {
      */
     @Bean
     @Qualifier("openaiWebClient")
-    @ConditionalOnProperty(prefix = "providers.openai", name = "api-key")
+    @ConditionalOnExpression("'${providers.openai.api-key:}'.length() > 0")
     public WebClient openaiWebClient() {
         return buildWebClient(
                 openAIProperties.baseUrl(),
@@ -83,7 +83,7 @@ public class WebClientConfig {
      */
     @Bean
     @Qualifier("embeddingWebClient")
-    @ConditionalOnProperty(prefix = "providers.openai", name = "api-key")
+    @ConditionalOnExpression("'${providers.openai.api-key:}'.length() > 0")
     public WebClient embeddingWebClient() {
         return WebClient.builder()
                 .baseUrl(openAIProperties.baseUrl())
@@ -104,27 +104,29 @@ public class WebClientConfig {
      */
     @Bean
     @Qualifier("anthropicWebClient")
-    @ConditionalOnProperty(prefix = "providers.anthropic", name = "api-key")
+    @ConditionalOnExpression("'${providers.anthropic.api-key:}'.length() > 0")
     public WebClient anthropicWebClient() {
-        HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofSeconds(anthropicProperties.timeoutSeconds()));
         return WebClient.builder()
                 .baseUrl(anthropicProperties.baseUrl())
                 .defaultHeader("x-api-key", anthropicProperties.apiKey())
                 .defaultHeader("anthropic-version", "2023-06-01")
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .clientConnector(new ReactorClientHttpConnector(
+                        buildBaseClient(anthropicProperties.timeoutSeconds())))
                 .build();
     }
 
-    private WebClient buildWebClient(String baseUrl, String apiKey, int timeoutSeconds) {
-        HttpClient httpClient = HttpClient.create()
+    private HttpClient buildBaseClient(int timeoutSeconds) {
+        return HttpClient.create()
                 .responseTimeout(Duration.ofSeconds(timeoutSeconds));
+    }
+
+    private WebClient buildWebClient(String baseUrl, String apiKey, int timeoutSeconds) {
         return WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .clientConnector(new ReactorClientHttpConnector(buildBaseClient(timeoutSeconds)))
                 .build();
     }
 }
