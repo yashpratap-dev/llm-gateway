@@ -179,14 +179,16 @@ export function Playground() {
 
         {/* Chat area */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Orb centered when no messages */}
-          {messages.length === 0 && !isStreaming && (
-            <div className="flex flex-col items-center justify-center h-full gap-3">
-              <AIOrb streaming={false} size={60} />
-              <Badge variant="neutral" size="sm">READY</Badge>
+          {/* Orb — always visible at top */}
+          <div className="flex flex-col items-center pt-4 pb-6 gap-3">
+            <AIOrb streaming={isStreaming} size={120} />
+            <Badge variant={isStreaming ? 'warning' : 'neutral'} size="sm">
+              {isStreaming ? 'PROCESSING' : 'READY'}
+            </Badge>
+            {messages.length === 0 && !isStreaming && (
               <p className="text-xs text-text-secondary">Send a message to get started</p>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Messages */}
           {messages.map((msg) => (
@@ -301,8 +303,8 @@ export function Playground() {
                 exit={{ opacity: 0 }}
                 className="flex justify-start gap-3"
               >
-                <div className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <AIOrb streaming size={28} />
+                <div className="w-8 h-8 rounded-full bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-3 h-3 rounded-full bg-accent-primary/60 animate-pulse" />
                 </div>
                 <div className="max-w-[75%]">
                   <div className="rounded-2xl px-4 py-3 text-sm bg-white/4 border border-white/8">
