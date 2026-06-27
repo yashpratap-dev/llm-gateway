@@ -177,6 +177,7 @@ public class GatewayMetricsService {
                 case GROQ   -> "groq-llama";
                 case OPENAI -> "openai-gpt";
                 case CLAUDE -> "anthropic-claude";
+                case GEMINI -> "google-gemini";
             };
         } catch (IllegalArgumentException e) {
             return "unknown";

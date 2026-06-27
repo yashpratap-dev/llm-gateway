@@ -1,6 +1,7 @@
 package dev.yashpratap.llmgateway.config;
 
 import dev.yashpratap.llmgateway.provider.anthropic.AnthropicProperties;
+import dev.yashpratap.llmgateway.provider.gemini.GeminiProperties;
 import dev.yashpratap.llmgateway.provider.groq.GroqProperties;
 import dev.yashpratap.llmgateway.provider.openai.OpenAIProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,6 +30,7 @@ public class WebClientConfig {
     private final GroqProperties groqProperties;
     private final OpenAIProperties openAIProperties;
     private final AnthropicProperties anthropicProperties;
+    private final GeminiProperties geminiProperties;
 
     /**
      * Constructs the config with all provider properties.
@@ -36,13 +38,16 @@ public class WebClientConfig {
      * @param groqProperties      bound Groq configuration
      * @param openAIProperties    bound OpenAI configuration
      * @param anthropicProperties bound Anthropic configuration
+     * @param geminiProperties    bound Gemini configuration
      */
     public WebClientConfig(GroqProperties groqProperties,
                            OpenAIProperties openAIProperties,
-                           AnthropicProperties anthropicProperties) {
+                           AnthropicProperties anthropicProperties,
+                           GeminiProperties geminiProperties) {
         this.groqProperties = groqProperties;
         this.openAIProperties = openAIProperties;
         this.anthropicProperties = anthropicProperties;
+        this.geminiProperties = geminiProperties;
     }
 
     /**
@@ -113,6 +118,27 @@ public class WebClientConfig {
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .clientConnector(new ReactorClientHttpConnector(
                         buildBaseClient(anthropicProperties.timeoutSeconds())))
+                .build();
+    }
+
+    /**
+     * Creates the Gemini-specific {@link WebClient}, only when
+     * {@code providers.gemini.api-key} is set.
+     *
+     * <p>Gemini passes the API key as a {@code key} query parameter on each request,
+     * NOT as a header, so no auth header is added at the WebClient level.</p>
+     *
+     * @return a {@link WebClient} pre-configured for the Gemini Generative Language API
+     */
+    @Bean
+    @Qualifier("geminiWebClient")
+    @ConditionalOnExpression("'${providers.gemini.api-key:}'.length() > 0")
+    public WebClient geminiWebClient() {
+        return WebClient.builder()
+                .baseUrl(geminiProperties.baseUrl())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .clientConnector(new ReactorClientHttpConnector(
+                        buildBaseClient(geminiProperties.timeoutSeconds())))
                 .build();
     }
 

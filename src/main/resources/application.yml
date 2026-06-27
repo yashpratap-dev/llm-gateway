@@ -85,6 +85,13 @@ providers:
     default-model: claude-3-5-sonnet-20241022
     timeout-seconds: 30
     max-output-tokens: 1024
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com
+    api-version: v1beta
+    default-model: gemini-1.5-flash
+    timeout-seconds: 30
+    max-output-tokens: 1024
 
 resilience4j:
   circuitbreaker:
@@ -126,6 +133,15 @@ resilience4j:
         waitDurationInOpenState: 30s
         failureRateThreshold: 50
         eventConsumerBufferSize: 10
+      gemini-provider:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
   retry:
     instances:
       groq:
@@ -151,6 +167,12 @@ resilience4j:
           - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
           - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
       claude-provider:
+        maxAttempts: 3
+        waitDuration: 500ms
+        retryExceptions:
+          - dev.yashpratap.llmgateway.provider.exception.ProviderTimeoutException
+          - dev.yashpratap.llmgateway.provider.exception.ProviderUnavailableException
+      gemini-provider:
         maxAttempts: 3
         waitDuration: 500ms
         retryExceptions:

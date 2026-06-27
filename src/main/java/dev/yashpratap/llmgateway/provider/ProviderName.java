@@ -15,5 +15,8 @@ public enum ProviderName {
     OPENAI,
 
     /** Anthropic Claude family models. */
-    CLAUDE
+    CLAUDE,
+
+    /** Google Gemini family models. */
+    GEMINI
 }
