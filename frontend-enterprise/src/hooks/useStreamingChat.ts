@@ -135,6 +135,9 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
       { role: 'user' as const, content: userContent },
     ];
 
+    // Declared outside try/catch so the AbortError handler can commit partial content
+    let accumulated = '';
+
     try {
       if (streaming) {
         // ── SSE streaming path ────────────────────────────────────────────
@@ -153,10 +156,9 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
           throw new Error(`Gateway ${res.status}: ${text}`);
         }
 
-        const reader    = res.body!.getReader();
-        const decoder   = new TextDecoder();
-        let accumulated = '';
-        let sseBuffer   = '';
+        const reader  = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let sseBuffer = '';
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
@@ -198,13 +200,20 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
-        // User hit Stop — clear streaming state; don't commit a partial message
-        setIsStreaming(false);
-        setStreamingContent('');
+        // User hit Stop — commit whatever was accumulated; only clear if nothing arrived yet
+        if (accumulated) {
+          finalise(accumulated);
+        } else {
+          setIsStreaming(false);
+          setStreamingContent('');
+        }
       } else {
         const msg = err instanceof Error ? err.message : String(err);
         finalise(`Error: ${msg}`);
       }
+    } finally {
+      // Safety net: always clear streaming flag even if finalise threw or was skipped
+      setIsStreaming(false);
     }
   }, [finalise]);
 
