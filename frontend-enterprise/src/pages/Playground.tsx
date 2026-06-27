@@ -194,7 +194,7 @@ export function Playground() {
 
           {/* Scrollable messages — pushed right to clear the orb */}
           <div
-            className="absolute inset-0 overflow-y-auto py-4 pr-6 space-y-4"
+            className="absolute inset-0 overflow-y-auto py-4 pr-6 space-y-6"
             style={{ paddingLeft: '330px', zIndex: 1 }}
           >
             {/* Empty state hint */}
@@ -226,9 +226,9 @@ export function Playground() {
                   </div>
                 )}
 
-                <div className={`max-w-[85%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+                <div className={msg.role === 'user' ? 'max-w-[55%] order-first' : 'max-w-[60%]'}>
                   <div
-                    className={`rounded-2xl px-4 py-3 text-sm ${
+                    className={`rounded-2xl px-5 py-4 text-sm ${
                       msg.role === 'user'
                         ? 'bg-accent-primary/15 border border-accent-primary/20 text-text-primary ml-auto'
                         : 'bg-white/4 border border-white/8 text-text-primary'
@@ -242,7 +242,7 @@ export function Playground() {
                             const isBlock = match !== null;
                             if (isBlock) {
                               return (
-                                <div className="code-block my-2 rounded-lg overflow-hidden border border-white/10">
+                                <div className="code-block my-2 rounded-lg overflow-x-auto border border-white/10">
                                   <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/8">
                                     <span className="text-[10px] text-text-secondary font-mono uppercase">
                                       {match[1]}
@@ -279,7 +279,7 @@ export function Playground() {
                             );
                           },
                           p: ({ children }) => (
-                            <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+                            <p className="mb-2 last:mb-0 leading-[1.75]">{children}</p>
                           ),
                           ul: ({ children }) => (
                             <ul className="list-disc list-inside space-y-1 mb-2">{children}</ul>
@@ -323,12 +323,12 @@ export function Playground() {
                   <div className="w-8 h-8 rounded-full bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <div className="w-3 h-3 rounded-full bg-accent-primary/60 animate-pulse" />
                   </div>
-                  <div className="max-w-[85%]">
-                    <div className="rounded-2xl px-4 py-3 text-sm bg-white/4 border border-white/8">
+                  <div className="max-w-[60%]">
+                    <div className="rounded-2xl px-5 py-4 text-sm bg-white/4 border border-white/8">
                       {streamingContent ? (
                         <ReactMarkdown
                           components={{
-                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            p: ({ children }) => <p className="mb-2 last:mb-0 leading-[1.75]">{children}</p>,
                           }}
                         >
                           {streamingContent}

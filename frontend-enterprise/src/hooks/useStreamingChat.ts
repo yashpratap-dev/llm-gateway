@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import type { ChatMessage } from '../types';
-import { sampleResponses } from '../mock/playground';
+import { getContextualResponse } from '../mock/playground';
 
 interface UseStreamingChatReturn {
   messages: ChatMessage[];
@@ -79,8 +79,7 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
 
       setMessages(prev => [...prev, userMessage]);
 
-      // Pick a sample response
-      const response = sampleResponses[Math.floor(Math.random() * sampleResponses.length)];
+      const response = getContextualResponse(content);
       streamResponse(response);
     },
     [isStreaming, streamResponse]
@@ -102,7 +101,7 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
       return prev;
     });
 
-    const response = sampleResponses[Math.floor(Math.random() * sampleResponses.length)];
+    const response = getContextualResponse(lastUserMessageRef.current);
     streamResponse(response);
   }, [isStreaming, streamResponse]);
 

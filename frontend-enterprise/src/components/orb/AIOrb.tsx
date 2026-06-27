@@ -2,7 +2,7 @@ import { useRef, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const PARTICLE_COUNT = 80;
+const PARTICLE_COUNT = 48;
 
 function OrbScene({ streaming }: { streaming: boolean }) {
   const coreRef  = useRef<THREE.Mesh>(null);
@@ -26,27 +26,27 @@ function OrbScene({ streaming }: { streaming: boolean }) {
 
   useFrame((_, delta) => {
     t.current += delta;
-    const speed = streaming ? 1.4 : 0.22;
+    const speed = streaming ? 0.6 : 0.25;
 
     if (coreRef.current) {
       coreRef.current.rotation.y += delta * speed;
-      coreRef.current.rotation.x  = Math.sin(t.current * 0.4) * 0.1;
+      coreRef.current.rotation.x  = Math.sin(t.current * 0.4) * 0.08;
       if (streaming) {
-        coreRef.current.scale.setScalar(1 + Math.sin(t.current * 4) * 0.07);
+        coreRef.current.scale.setScalar(1 + Math.sin(t.current * 1.5) * 0.04);
       } else {
         coreRef.current.scale.setScalar(1);
       }
       const mat = coreRef.current.material as THREE.MeshStandardMaterial;
       mat.emissiveIntensity = streaming
-        ? 0.55 + Math.sin(t.current * 3) * 0.15
+        ? 0.38 + Math.sin(t.current * 1.5) * 0.08
         : 0.28;
     }
 
     if (wireRef.current) {
       wireRef.current.rotation.y += delta * speed * 0.7;
-      wireRef.current.rotation.x  = Math.cos(t.current * 0.3) * 0.08;
+      wireRef.current.rotation.x  = Math.cos(t.current * 0.3) * 0.06;
       const wmat = wireRef.current.material as THREE.MeshBasicMaterial;
-      wmat.opacity = streaming ? 0.45 + Math.sin(t.current * 2) * 0.1 : 0.22;
+      wmat.opacity = streaming ? 0.30 + Math.sin(t.current * 1.0) * 0.05 : 0.22;
     }
 
     if (glowRef.current) {
