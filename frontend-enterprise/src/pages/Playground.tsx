@@ -52,7 +52,7 @@ export function Playground() {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
-    sendMessage(input);
+    sendMessage(input, config.streaming);
     setInput('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -388,7 +388,7 @@ export function Playground() {
               exit={{ opacity: 0 }}
               className="flex items-center justify-center gap-2 py-1.5 border-t border-white/8 flex-shrink-0"
             >
-              <Button variant="ghost" size="sm" icon={<RotateCcw size={12} />} onClick={regenerate}>
+              <Button variant="ghost" size="sm" icon={<RotateCcw size={12} />} onClick={() => regenerate(config.streaming)}>
                 Regenerate
               </Button>
               <Button
