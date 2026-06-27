@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { CSSProperties } from 'react';
 import {
   Send,
   Paperclip,
@@ -21,7 +20,6 @@ import { AIOrb } from '../components/orb/AIOrb';
 import { TelemetryRail } from '../components/layout/TelemetryRail';
 import { Tabs } from '../components/ui/Tabs';
 import { Toggle } from '../components/ui/Toggle';
-import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { useStreamingChat } from '../hooks/useStreamingChat';
@@ -177,164 +175,184 @@ export function Playground() {
           </div>
         </div>
 
-        {/* Chat area */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Orb — always visible at top */}
-          <div className="flex flex-col items-center pt-4 pb-6 gap-3">
-            <AIOrb streaming={isStreaming} size={120} />
-            <Badge variant={isStreaming ? 'warning' : 'neutral'} size="sm">
-              {isStreaming ? 'PROCESSING' : 'READY'}
-            </Badge>
-            {messages.length === 0 && !isStreaming && (
-              <p className="text-xs text-text-secondary">Send a message to get started</p>
-            )}
+        {/* Chat area — relative container so orb can be absolute-positioned */}
+        <div className="flex-1 relative overflow-hidden">
+
+          {/* Orb: fixed to left-center of chat area, behind messages, not in scroll flow */}
+          <div
+            style={{
+              position:   'absolute',
+              left:       '20px',
+              top:        '50%',
+              transform:  'translateY(-50%)',
+              zIndex:     0,
+              pointerEvents: 'none',
+            }}
+          >
+            <AIOrb streaming={isStreaming} size={300} />
           </div>
 
-          {/* Messages */}
-          {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3`}
-            >
-              {msg.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <div className="w-4 h-4">
-                    <svg viewBox="0 0 16 16" fill="none">
-                      <circle cx="8" cy="8" r="4" fill="#19D3FF" fillOpacity="0.6" />
-                      <circle cx="8" cy="8" r="2" fill="#19D3FF" />
-                    </svg>
-                  </div>
-                </div>
-              )}
-
-              <div className={`max-w-[75%] ${msg.role === 'user' ? 'order-first' : ''}`}>
-                <div
-                  className={`rounded-2xl px-4 py-3 text-sm ${
-                    msg.role === 'user'
-                      ? 'bg-accent-primary/15 border border-accent-primary/20 text-text-primary ml-auto'
-                      : 'bg-white/4 border border-white/8 text-text-primary'
-                  }`}
-                >
-                  {msg.role === 'assistant' ? (
-                    <ReactMarkdown
-                      components={{
-                        code({ className, children }) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          const isBlock = match !== null;
-                          if (isBlock) {
-                            return (
-                              <div className="code-block my-2 rounded-lg overflow-hidden border border-white/10">
-                                <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/8">
-                                  <span className="text-[10px] text-text-secondary font-mono uppercase">
-                                    {match[1]}
-                                  </span>
-                                  <button
-                                    onClick={() => copyMessage(String(children))}
-                                    className="flex items-center gap-1 text-[10px] text-text-secondary hover:text-text-primary transition-colors"
-                                  >
-                                    <Copy size={10} />
-                                    Copy
-                                  </button>
-                                </div>
-                                <SyntaxHighlighter
-                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  style={vscDarkPlus as any}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  customStyle={{
-                                    margin: 0,
-                                    background: 'rgba(255,255,255,0.02)',
-                                    fontSize: '12px',
-                                    lineHeight: '1.6',
-                                  }}
-                                >
-                                  {String(children).replace(/\n$/, '')}
-                                </SyntaxHighlighter>
-                              </div>
-                            );
-                          }
-                          return (
-                            <code className="bg-white/8 rounded px-1 py-0.5 text-accent-primary text-[11px] font-mono">
-                              {children}
-                            </code>
-                          );
-                        },
-                        p: ({ children }) => (
-                          <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
-                        ),
-                        ul: ({ children }) => (
-                          <ul className="list-disc list-inside space-y-1 mb-2">{children}</ul>
-                        ),
-                        ol: ({ children }) => (
-                          <ol className="list-decimal list-inside space-y-1 mb-2">{children}</ol>
-                        ),
-                        strong: ({ children }) => (
-                          <strong className="font-semibold text-white">{children}</strong>
-                        ),
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="leading-relaxed">{msg.content}</p>
-                  )}
-                </div>
-                <p className="text-[10px] text-text-secondary mt-1 px-1">
-                  {msg.timestamp.toLocaleTimeString()}
+          {/* Scrollable messages — pushed right to clear the orb */}
+          <div
+            className="absolute inset-0 overflow-y-auto py-4 pr-6 space-y-4"
+            style={{ paddingLeft: '330px', zIndex: 1 }}
+          >
+            {/* Empty state hint */}
+            {messages.length === 0 && !isStreaming && (
+              <div className="flex flex-col gap-1 mt-8">
+                <p className="text-sm text-text-secondary">Send a message to get started</p>
+                <p className="text-xs text-text-secondary/50">
+                  Provider: {config.provider} · Model: {config.model}
                 </p>
               </div>
+            )}
 
-              {msg.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-[10px] font-semibold text-accent-primary">YP</span>
-                </div>
-              )}
-            </motion.div>
-          ))}
-
-          {/* Streaming message */}
-          <AnimatePresence>
-            {isStreaming && (
+            {/* Messages */}
+            {messages.map((msg) => (
               <motion.div
+                key={msg.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex justify-start gap-3"
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3`}
               >
-                <div className="w-8 h-8 rounded-full bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <div className="w-3 h-3 rounded-full bg-accent-primary/60 animate-pulse" />
-                </div>
-                <div className="max-w-[75%]">
-                  <div className="rounded-2xl px-4 py-3 text-sm bg-white/4 border border-white/8">
-                    {streamingContent ? (
+                {msg.role === 'assistant' && (
+                  <div className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-4 h-4">
+                      <svg viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="4" fill="#19D3FF" fillOpacity="0.6" />
+                        <circle cx="8" cy="8" r="2" fill="#19D3FF" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`max-w-[85%] ${msg.role === 'user' ? 'order-first' : ''}`}>
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-accent-primary/15 border border-accent-primary/20 text-text-primary ml-auto'
+                        : 'bg-white/4 border border-white/8 text-text-primary'
+                    }`}
+                  >
+                    {msg.role === 'assistant' ? (
                       <ReactMarkdown
                         components={{
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          code({ className, children }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const isBlock = match !== null;
+                            if (isBlock) {
+                              return (
+                                <div className="code-block my-2 rounded-lg overflow-hidden border border-white/10">
+                                  <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/8">
+                                    <span className="text-[10px] text-text-secondary font-mono uppercase">
+                                      {match[1]}
+                                    </span>
+                                    <button
+                                      onClick={() => copyMessage(String(children))}
+                                      className="flex items-center gap-1 text-[10px] text-text-secondary hover:text-text-primary transition-colors"
+                                    >
+                                      <Copy size={10} />
+                                      Copy
+                                    </button>
+                                  </div>
+                                  <SyntaxHighlighter
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    style={vscDarkPlus as any}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    customStyle={{
+                                      margin: 0,
+                                      background: 'rgba(255,255,255,0.02)',
+                                      fontSize: '12px',
+                                      lineHeight: '1.6',
+                                    }}
+                                  >
+                                    {String(children).replace(/\n$/, '')}
+                                  </SyntaxHighlighter>
+                                </div>
+                              );
+                            }
+                            return (
+                              <code className="bg-white/8 rounded px-1 py-0.5 text-accent-primary text-[11px] font-mono">
+                                {children}
+                              </code>
+                            );
+                          },
+                          p: ({ children }) => (
+                            <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+                          ),
+                          ul: ({ children }) => (
+                            <ul className="list-disc list-inside space-y-1 mb-2">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal list-inside space-y-1 mb-2">{children}</ol>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold text-white">{children}</strong>
+                          ),
                         }}
                       >
-                        {streamingContent}
+                        {msg.content}
                       </ReactMarkdown>
                     ) : (
-                      <div className="flex items-center gap-1.5 py-1">
-                        <span className="text-text-secondary text-xs">Thinking</span>
-                        {[0, 1, 2].map(i => (
-                          <div
-                            key={i}
-                            className="thinking-dot w-1.5 h-1.5 rounded-full bg-accent-primary"
-                            style={{ animationDelay: `${i * 0.2}s` }}
-                          />
-                        ))}
-                      </div>
+                      <p className="leading-relaxed">{msg.content}</p>
                     )}
                   </div>
+                  <p className="text-[10px] text-text-secondary mt-1 px-1">
+                    {msg.timestamp.toLocaleTimeString()}
+                  </p>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
-          <div ref={chatEndRef} />
+                {msg.role === 'user' && (
+                  <div className="w-8 h-8 rounded-full bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-[10px] font-semibold text-accent-primary">YP</span>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+
+            {/* Streaming message */}
+            <AnimatePresence>
+              {isStreaming && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex justify-start gap-3"
+                >
+                  <div className="w-8 h-8 rounded-full bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-3 h-3 rounded-full bg-accent-primary/60 animate-pulse" />
+                  </div>
+                  <div className="max-w-[85%]">
+                    <div className="rounded-2xl px-4 py-3 text-sm bg-white/4 border border-white/8">
+                      {streamingContent ? (
+                        <ReactMarkdown
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          }}
+                        >
+                          {streamingContent}
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="flex items-center gap-1.5 py-1">
+                          <span className="text-text-secondary text-xs">Thinking</span>
+                          {[0, 1, 2].map(i => (
+                            <div
+                              key={i}
+                              className="thinking-dot w-1.5 h-1.5 rounded-full bg-accent-primary"
+                              style={{ animationDelay: `${i * 0.2}s` }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div ref={chatEndRef} />
+          </div>
         </div>
 
         {/* Streaming controls */}
