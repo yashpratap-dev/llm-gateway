@@ -1,0 +1,11 @@
+target/
+.env
+*.env
+frontend-enterprise/
+dashboard/
+playground/
+.claude/
+frontend-enterprise/design-refs/
+.git/
+*.log
+*.md

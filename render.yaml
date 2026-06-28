@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: llm-gateway-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    port: 8081
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: llm-gateway-db
+          property: internalConnectionString
+      - key: DB_USERNAME
+        fromDatabase:
+          name: llm-gateway-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: llm-gateway-db
+          property: password
+      - key: REDIS_HOST
+        fromService:
+          name: llm-gateway-redis
+          type: redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          name: llm-gateway-redis
+          type: redis
+          property: port
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SERVER_PORT
+        value: "8081"
+
+  - type: redis
+    name: llm-gateway-redis
+    plan: free
+
+databases:
+  - name: llm-gateway-db
+    plan: free
