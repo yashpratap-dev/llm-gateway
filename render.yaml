@@ -6,10 +6,18 @@ services:
     plan: free
     port: 8081
     envVars:
-      - key: DB_URL
+      - key: DB_HOST
         fromDatabase:
           name: llm-gateway-db
-          property: internalConnectionString
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: llm-gateway-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: llm-gateway-db
+          property: database
       - key: DB_USERNAME
         fromDatabase:
           name: llm-gateway-db
