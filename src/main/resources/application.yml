@@ -7,8 +7,8 @@ spring:
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:llmgateway}
-    username: llmgateway
-    password: llmgateway
+    username: ${DB_USERNAME:llmgateway}
+    password: ${DB_PASSWORD:llmgateway}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -27,8 +27,8 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6380
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
       password:
       timeout: 2000ms
 
