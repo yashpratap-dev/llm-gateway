@@ -3,6 +3,7 @@ import type { ChatMessage } from '../types';
 
 // API key comes from .env (VITE_ prefix exposes it to the browser bundle)
 const API_KEY = import.meta.env.VITE_API_KEY as string;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 // ─── Backend SSE payload shapes ────────────────────────────────────────────
 interface TokenPayload { delta: string }
@@ -141,7 +142,7 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
     try {
       if (streaming) {
         // ── SSE streaming path ────────────────────────────────────────────
-        const res = await fetch('/api/v1/chat/completions/stream', {
+        const res = await fetch(`${API_BASE_URL}/api/v1/chat/completions/stream`, {
           method:  'POST',
           headers: {
             'Content-Type':  'application/json',
@@ -179,7 +180,7 @@ export function useStreamingChat(initialMessages: ChatMessage[]): UseStreamingCh
         finalise(accumulated);
       } else {
         // ── Non-streaming path ────────────────────────────────────────────
-        const res = await fetch('/api/v1/chat/completions', {
+        const res = await fetch(`${API_BASE_URL}/api/v1/chat/completions`, {
           method:  'POST',
           headers: {
             'Content-Type':  'application/json',

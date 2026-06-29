@@ -61,7 +61,9 @@
       "Bash(git -C /d/llm-gateway/.claude/worktrees/agent-a5567aedc023f4f8e commit -m ' *)",
       "Bash(git *)",
       "Bash(node_modules/.bin/tsc --noEmit)",
-      "Bash(node_modules/.bin/vite build *)"
+      "Bash(node_modules/.bin/vite build *)",
+      "PowerShell(docker build *)",
+      "PowerShell(git *)"
     ]
   }
 }
